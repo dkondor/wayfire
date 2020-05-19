@@ -40,7 +40,7 @@ static inline int vswipe_finish_target(const double accumulated_dx,
     {
         target_dx = std::floor(accumulated_dx);
         if (accumulated_dx - target_dx > move_threshold ||
-            (!free_movement && last_deltas > fast_threshold))
+            ((!free_movement || !target_dx) && last_deltas > fast_threshold))
         {
             ++target_dx;
         }
@@ -52,7 +52,7 @@ static inline int vswipe_finish_target(const double accumulated_dx,
     {
         target_dx = std::ceil(accumulated_dx);
         if (accumulated_dx - target_dx < -move_threshold ||
-            (!free_movement && last_deltas < -fast_threshold))
+            ((!free_movement || !target_dx) && last_deltas < -fast_threshold))
         {
             --target_dx;
         }

@@ -60,6 +60,7 @@ class vswipe : public wf::plugin_interface_t
         swipe_direction_t direction;
 
         wf::pointf_t initial_deltas;
+        wf::pointf_t delta_sum;
 
         wf::pointf_t delta_prev;
         wf::pointf_t delta_last;
@@ -73,6 +74,7 @@ class vswipe : public wf::plugin_interface_t
     std::unique_ptr<wf::workspace_wall_t> wall;
     wf::option_wrapper_t<bool> enable_horizontal{"vswipe/enable_horizontal"};
     wf::option_wrapper_t<bool> enable_vertical{"vswipe/enable_vertical"};
+    wf::option_wrapper_t<bool> enable_free_movement{"vswipe/enable_free_movement"};
     wf::option_wrapper_t<bool> smooth_transition{"vswipe/enable_smooth_transition"};
 
     wf::option_wrapper_t<wf::color_t> background_color{"vswipe/background"};
@@ -153,6 +155,7 @@ class vswipe : public wf::plugin_interface_t
 
         state.delta_last = {0, 0};
         state.delta_prev = {0, 0};
+        state.delta_sum = {0, 0};
 
         // We switch the actual workspace before the finishing animation,
         // so the rendering of the animation cannot dynamically query current
@@ -183,31 +186,38 @@ class vswipe : public wf::plugin_interface_t
         wall->start_output_renderer();
     }
 
+    // XXX: how to determine this??
+    static constexpr double initial_direction_threshold = 0.05;
+    static constexpr double secondary_direction_threshold = 0.3;
+    static constexpr double diagonal_threshold = 1.73; // tan(30deg)
+    bool is_diagonal(wf::pointf_t deltas)
+    {
+        /* Diagonal movement is possible if the slope is not too steep
+         * and we have moved enough */
+        double slope = deltas.x / deltas.y;
+        bool diagonal = wf::clamp(slope,
+            1.0 / diagonal_threshold, diagonal_threshold) == slope;
+        diagonal &= (deltas.x * deltas.x + deltas.y * deltas.y) >=
+                initial_direction_threshold * initial_direction_threshold;
+
+        return diagonal;
+    }
+
     swipe_direction_t calculate_direction(wf::pointf_t deltas)
     {
         auto grid = output->workspace->get_workspace_grid_size();
-        // XXX: how to determine this??
-        static constexpr double initial_direction_threshold = 0.05;
-        static constexpr double diagonal_threshold = 3;
 
         bool horizontal = deltas.x > initial_direction_threshold;
         bool vertical = deltas.y > initial_direction_threshold;
 
-        horizontal &= grid.width > 1 && enable_horizontal;
-        vertical &= grid.height > 1 && enable_vertical;
-
         horizontal &= deltas.x > deltas.y;
         vertical &= deltas.y > deltas.x;
 
-        double d = deltas.x / deltas.y;
-        bool diagonal =
-            wf::clamp(d, 1.0 / diagonal_threshold, diagonal_threshold) == d;
-
-        if ((horizontal || vertical) && diagonal) {
+        if (is_diagonal(deltas) && enable_free_movement) {
             return DIAGONAL;
-        } if (horizontal) {
+        } else if (horizontal && grid.width > 1 && enable_horizontal) {
             return HORIZONTAL;
-        } else if (vertical) {
+        } else if (vertical && grid.height > 1 && enable_vertical) {
             return VERTICAL;
         }
 
@@ -222,6 +232,8 @@ class vswipe : public wf::plugin_interface_t
         auto ev = static_cast<
             event<wlr_event_pointer_swipe_update>*> (data)->event;
 
+        state.delta_sum.x += ev->dx / speed_factor;
+        state.delta_sum.y += ev->dy / speed_factor;
         if (state.direction == UNKNOWN)
         {
             state.initial_deltas.x +=
@@ -235,6 +247,15 @@ class vswipe : public wf::plugin_interface_t
 
             start_swipe(state.direction);
         }
+        else if (state.direction != DIAGONAL && enable_free_movement)
+        {
+            /* Consider promoting to diagonal movement */
+            double other = (state.direction == HORIZONTAL ?
+                state.delta_sum.y : state.delta_sum.x);
+            LOGI("now we have ", state.delta_sum.x, " ", state.delta_sum.y);
+            if (std::abs(other) > secondary_direction_threshold)
+                state.direction = DIAGONAL;
+        }
 
         const double cap = speed_cap;
         const double fac = speed_factor;
@@ -246,7 +267,7 @@ class vswipe : public wf::plugin_interface_t
             wf::timed_transition_t& total_delta, int ws, int ws_max)
         {
             current_delta_processed = vswipe_process_delta(delta, total_delta,
-                ws, ws_max, cap, fac);
+                ws, ws_max, cap, fac, enable_free_movement);
 
             double new_delta_end = total_delta.end + current_delta_processed;
             double new_delta_start =
@@ -283,7 +304,7 @@ class vswipe : public wf::plugin_interface_t
         {
             target_delta.x = vswipe_finish_target(smooth_delta.dx.end,
                 state.vx, state.vw, state.delta_prev.x + state.delta_last.x,
-                move_threshold, fast_threshold);
+                move_threshold, fast_threshold, enable_free_movement);
             target_workspace.x -= target_delta.x;
         }
 
@@ -291,7 +312,7 @@ class vswipe : public wf::plugin_interface_t
         {
             target_delta.y = vswipe_finish_target(smooth_delta.dy.end,
                 state.vy, state.vh, state.delta_prev.y + state.delta_last.y,
-                move_threshold, fast_threshold);
+                move_threshold, fast_threshold, enable_free_movement);
             target_workspace.y -= target_delta.y;
         }
 

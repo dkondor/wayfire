@@ -52,8 +52,8 @@ class wlr_workspaces_intergration : public plugin_interface_t
                 workspaces[i][j] = wlr_workspace_handle_v1_create(group);
 
                 std::string name =
-                    output->to_string() + "workspace-" +
-                    std::to_string(i * ws_dim.height + j);
+                    output->to_string() + ":workspace-" +
+                    std::to_string(i * ws_dim.width + j);
                 wlr_workspace_handle_v1_set_name(workspaces[i][j], name.c_str());
 
                 wl_array coordinates;
@@ -91,15 +91,16 @@ class wlr_workspaces_intergration : public plugin_interface_t
 
             output->workspace->request_workspace(active_workspace);
         });
+        on_commit.connect(&manager->manager->events.commit);
     }
 
     signal_connection_t on_current_workspace_changed = [&] (signal_data_t *data)
     {
         auto ev = static_cast<wf::workspace_changed_signal*>(data);
         wlr_workspace_handle_v1_set_active(
-            workspaces[ev->old_viewport.x][ev->old_viewport.y], false);
+            workspaces[ev->old_viewport.y][ev->old_viewport.x], false);
         wlr_workspace_handle_v1_set_active(
-            workspaces[ev->new_viewport.x][ev->new_viewport.y], true);
+            workspaces[ev->new_viewport.y][ev->new_viewport.x], true);
     };
 
     void fini() override

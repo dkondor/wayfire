@@ -69,6 +69,16 @@ class wayfire_layer_shell_view : public wf::wlr_view_t, public wf::compositor_su
 				wl_keyboard_send_enter(keyboard_resource, serial, resource, &keys);
 			}
 			wl_array_release(&keys);
+			
+			/* try to get the active modifiers and send them */
+			serial = wlr_seat_client_next_serial(wlrc);
+			wlr_keyboard* keyboard = seat->keyboard_state.keyboard;
+			wl_resource_for_each(keyboard_resource, &wlrc->keyboards) {
+				if(!wl_resource_get_user_data(keyboard_resource)) { continue; }
+				wl_keyboard_send_modifiers(keyboard_resource, serial,
+					keyboard->modifiers.depressed, keyboard->modifiers.latched,
+					keyboard->modifiers.locked, keyboard->modifiers.group);
+			}
 		}
 		else if(state == WLR_BUTTON_RELEASED) {
 			uint32_t serial = wlr_seat_client_next_serial(wlrc);

@@ -16,7 +16,7 @@ static const uint32_t both_vert =
 static const uint32_t both_horiz =
     ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
 
-class wayfire_layer_shell_view : public wf::wlr_view_t
+class wayfire_layer_shell_view : public wf::wlr_view_t, public wf::compositor_surface_t
 {
     wf::wl_listener_wrapper on_map, on_unmap, on_destroy, on_new_popup;
     wf::wl_listener_wrapper on_commit_unmapped;
@@ -45,6 +45,41 @@ class wayfire_layer_shell_view : public wf::wlr_view_t
 
     /** Calculate the target layer for this layer surface */
     wf::layer_t get_layer();
+    
+    void on_pointer_button(uint32_t button, uint32_t state) override {
+		LOGI("layer_shell_view::on_pointer_button");
+		wlr_surface* wlrs = get_wlr_surface();
+		if(!wlrs) {
+			LOGW("Cannot find wlr_surface!\n");
+			return;
+		}
+		wl_resource* resource = wlrs->resource;
+		wl_client* client = wl_resource_get_client(resource);
+		/* TODO: get seat! */
+		wlr_seat* seat = wf::get_core().get_current_seat();
+		wlr_seat_client* wlrc = wlr_seat_client_for_wl_client(seat, client);
+			
+		if(state == WLR_BUTTON_PRESSED) {
+			uint32_t serial = wlr_seat_client_next_serial(wlrc);
+			wl_array keys;
+			wl_array_init(&keys);
+			wl_resource* keyboard_resource;
+			wl_resource_for_each(keyboard_resource, &wlrc->keyboards) {
+				if(!wl_resource_get_user_data(keyboard_resource)) { continue; }
+				wl_keyboard_send_enter(keyboard_resource, serial, resource, &keys);
+			}
+			wl_array_release(&keys);
+		}
+		else if(state == WLR_BUTTON_RELEASED) {
+			uint32_t serial = wlr_seat_client_next_serial(wlrc);
+			wl_resource* keyboard_resource;
+			wl_resource_for_each(keyboard_resource, &wlrc->keyboards) {
+				if(!wl_resource_get_user_data(keyboard_resource)) { continue; }
+				wl_keyboard_send_leave(keyboard_resource, serial, resource);
+			}
+			
+		}
+	}
 };
 
 wf::workspace_manager::anchored_edge anchor_to_edge(uint32_t edges)

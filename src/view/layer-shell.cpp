@@ -58,6 +58,10 @@ class wayfire_layer_shell_view : public wf::wlr_view_t, public wf::compositor_su
 		/* TODO: get seat! */
 		wlr_seat* seat = wf::get_core().get_current_seat();
 		wlr_seat_client* wlrc = wlr_seat_client_for_wl_client(seat, client);
+		
+		/* do not do anything if this client is already focused for this seat */
+		if(wlrc == seat->keyboard_state.focused_client) return;
+		
 			
 		if(state == WLR_BUTTON_PRESSED) {
 			uint32_t serial = wlr_seat_client_next_serial(wlrc);

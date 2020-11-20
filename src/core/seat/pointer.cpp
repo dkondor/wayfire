@@ -408,7 +408,7 @@ void wf::pointer_t::send_motion(uint32_t time_msec, wf::pointf_t local)
     if (compositor_surface)
     {
         compositor_surface->on_pointer_motion(local.x, local.y);
-    } else
+    } /* else */
     {
         wlr_seat_pointer_notify_motion(
             seat->seat, time_msec, local.x, local.y);

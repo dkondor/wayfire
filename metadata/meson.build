@@ -38,3 +38,4 @@ install_data('scale-title-filter.xml', install_dir: conf_data.get('PLUGIN_XML_DI
 install_data('wsets.xml', install_dir: conf_data.get('PLUGIN_XML_DIR'))
 install_data('wayfire-shell.xml', install_dir: conf_data.get('PLUGIN_XML_DIR'))
 install_data('xdg-activation.xml', install_dir: conf_data.get('PLUGIN_XML_DIR'))
+install_data('scale_test.xml', install_dir: conf_data.get('PLUGIN_XML_DIR'))

@@ -184,19 +184,16 @@ add_title_overlay{[this] (wf::signal_data_t *data)
             ol->render(fb, damage);
         });
 
-        wf::scale_transformer::padding pad;
         const std::string& pos = title_position;
         if (pos == "top")
         {
             ol->pos = view_title_overlay::position::TOP;
-            pad.top = ol->get_size().height;
         } else if (pos == "bottom")
         {
-            ol->pos    = view_title_overlay::position::BOTTOM;
-            pad.bottom = ol->get_size().height;
+            ol->pos = view_title_overlay::position::BOTTOM;
         }
 
-        tr->add_overlay(cb, 1, pad);
+        tr->add_overlay(cb, 1);
     }
 },
 

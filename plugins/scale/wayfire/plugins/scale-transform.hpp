@@ -6,6 +6,8 @@
 #include <list>
 #include <algorithm>
 
+class wayfire_scale;
+
 namespace wf
 {
 /**
@@ -76,8 +78,7 @@ class scale_transformer : public wf::view_2D
      *                i.e. if two overlays add a top padding, the larger
      *                of the two values is used.
      */
-    void add_overlay(std::shared_ptr<scale_view_overlay>& ol, int z_order,
-        const padding& pad = {0, 0, 0, 0})
+    void add_overlay(std::shared_ptr<scale_view_overlay>& ol, int z_order)
     {
         auto it =
             std::find_if(overlays.begin(), overlays.end(),
@@ -86,32 +87,22 @@ class scale_transformer : public wf::view_2D
             return other->z_order >= z_order;
         });
 
-        overlays.insert(it, std::make_unique<overlay>(ol, z_order, pad));
-        extend_padding(this->pad, pad);
+        overlays.insert(it, std::make_unique<overlay>(ol, z_order));
         view->damage();
     }
 
-    void add_overlay(std::shared_ptr<scale_view_overlay>&& ol, int z_order,
-        const padding& pad = {0, 0, 0, 0})
+    void add_overlay(std::shared_ptr<scale_view_overlay>&& ol, int z_order)
     {
-        add_overlay(ol, z_order, pad);
+        add_overlay(ol, z_order);
     }
 
     /* remove an existing overlay */
     void rem_overlay(scale_view_overlay *ol)
     {
-        view->damage();
         overlays.remove_if([ol] (const auto& other)
         {
             return other->ol.get() == ol;
         });
-
-        /* recalculate padding */
-        pad = {0, 0, 0, 0};
-        for (const auto& ol : overlays)
-        {
-            extend_padding(pad, ol->pad);
-        }
 
         view->damage();
     }
@@ -161,16 +152,8 @@ class scale_transformer : public wf::view_2D
         return pad;
     }
 
-    /**
-     * extend padding in target to ensure it is at least as large as other
-     */
-    static void extend_padding(padding& target, const padding& other)
-    {
-        target.top    = std::max(target.top, other.top);
-        target.left   = std::max(target.left, other.left);
-        target.bottom = std::max(target.bottom, other.bottom);
-        target.right  = std::max(target.right, other.right);
-    }
+    /* scale plugin class is marked friend so that it can adjust the padding */
+    friend ::wayfire_scale;
 
   protected:
     /* extra info stored together with the overlay callbacks */
@@ -178,10 +161,8 @@ class scale_transformer : public wf::view_2D
     {
         std::shared_ptr<scale_view_overlay> ol; /* callback function */
         int z_order; /* order in which overalys are applied */
-        padding pad; /* extra padding needed by this overlay */
-        overlay(std::shared_ptr<scale_view_overlay>& ol_, int z_order_,
-            const padding& pad_) :
-            ol(ol_), z_order(z_order_), pad(pad_)
+        overlay(std::shared_ptr<scale_view_overlay>& ol_, int z_order_) :
+            ol(ol_), z_order(z_order_)
         {}
     };
 

@@ -946,6 +946,7 @@ class wayfire_scale : public wf::plugin_interface_t
                     // attributes set.
                     auto new_child   = add_transformer(child);
                     auto& child_data = scale_data[child];
+                    child_data.transformer->pad = pad;
                     if (new_child)
                     {
                         child_data.transformer->translation_x = main_view_dx;

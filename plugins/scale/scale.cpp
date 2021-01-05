@@ -16,6 +16,8 @@
 
 #include <linux/input-event-codes.h>
 
+#include "scale-title-overlay.hpp"
+
 using namespace wf::animation;
 
 class scale_animation_t : public duration_t
@@ -54,6 +56,8 @@ struct view_scale_data
 
 class wayfire_scale : public wf::plugin_interface_t
 {
+    /* helper class for optionally showing title overlays */
+    scale_show_title_t show_title;
     std::vector<int> current_row_sizes;
     wf::point_t initial_workspace;
     bool active, hook_set;
@@ -131,6 +135,8 @@ class wayfire_scale : public wf::plugin_interface_t
         allow_scale_zoom.set_callback(allow_scale_zoom_option_changed);
 
         setup_workspace_switching();
+
+        show_title.init(output);
     }
 
     void setup_workspace_switching()
@@ -1368,6 +1374,7 @@ class wayfire_scale : public wf::plugin_interface_t
         finalize();
         output->rem_binding(&toggle_cb);
         output->rem_binding(&toggle_all_cb);
+        show_title.fini();
     }
 };
 

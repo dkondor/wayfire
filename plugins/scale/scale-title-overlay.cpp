@@ -174,9 +174,15 @@ add_title_overlay{[this] (wf::signal_data_t *data)
             const wf::framebuffer_t& fb,
             const wf::region_t& damage)
         {
+            auto tmp_view = view;
+            while (tmp_view->parent)
+            {
+                tmp_view = tmp_view->parent;
+            }
+
             if ((show_view_title_overlay == title_overlay_t::NEVER) ||
                 ((show_view_title_overlay == title_overlay_t::MOUSE) &&
-                 (view != last_title_overlay)))
+                 (tmp_view != last_title_overlay)))
             {
                 return;
             }

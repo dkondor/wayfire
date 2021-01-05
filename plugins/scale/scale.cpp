@@ -12,9 +12,9 @@
 #include <wayfire/plugins/vswitch.hpp>
 #include <wayfire/touch/touch.hpp>
 #include <wayfire/plugins/scale-signal.hpp>
+#include <wayfire/plugins/scale-transform.hpp>
 
 #include <linux/input-event-codes.h>
-
 
 using namespace wf::animation;
 
@@ -34,24 +34,12 @@ struct wf_scale_animation_attribs
     scale_animation_t scale_animation{duration};
 };
 
-class wf_scale : public wf::view_2D
-{
-  public:
-    wf_scale(wayfire_view view) : wf::view_2D(view)
-    {}
-    ~wf_scale()
-    {}
-
-    uint32_t get_z_order() override
-    {
-        return wf::TRANSFORMER_HIGHLEVEL + 1;
-    }
-};
 
 struct view_scale_data
 {
     int row, col;
-    wf_scale *transformer = nullptr; /* avoid UB from uninitialized member */
+    wf::scale_transformer *transformer = nullptr; /* avoid UB from uninitialized
+                                                   * member */
     wf::animation::simple_animation_t fade_animation;
     wf_scale_animation_attribs animation;
     enum class view_visibility_t
@@ -69,7 +57,6 @@ class wayfire_scale : public wf::plugin_interface_t
     std::vector<int> current_row_sizes;
     wf::point_t initial_workspace;
     bool active, hook_set;
-    const std::string transformer_name = "scale";
     /* View that was active before scale began. */
     wayfire_view initial_focus_view;
     /* View that has active focus. */
@@ -181,17 +168,23 @@ class wayfire_scale : public wf::plugin_interface_t
     /* Add a transformer that will be used to scale the view */
     bool add_transformer(wayfire_view view)
     {
-        if (view->get_transformer(transformer_name))
+        if (view->get_transformer(wf::scale_transformer::transformer_name()))
         {
             return false;
         }
 
-        wf_scale *tr = new wf_scale(view);
+        wf::scale_transformer *tr = new wf::scale_transformer(view);
         scale_data[view].transformer = tr;
-        view->add_transformer(std::unique_ptr<wf_scale>(tr), transformer_name);
+        view->add_transformer(std::unique_ptr<wf::scale_transformer>(tr),
+            wf::scale_transformer::transformer_name());
         /* Transformers are added only once when scale is activated so
          * this is a good place to connect the geometry-changed handler */
         view->connect_signal("geometry-changed", &view_geometry_changed);
+
+        /* signal that a transformer was added to this view */
+        scale_transformer_added_signal data;
+        data.transformer = tr;
+        output->emit_signal("scale-transformer-added", &data);
 
         return true;
     }
@@ -199,7 +192,7 @@ class wayfire_scale : public wf::plugin_interface_t
     /* Remove the scale transformer from the view */
     void pop_transformer(wayfire_view view)
     {
-        view->pop_transformer(transformer_name);
+        view->pop_transformer(wf::scale_transformer::transformer_name());
     }
 
     /* Remove scale transformers from all views */
@@ -878,26 +871,34 @@ class wayfire_scale : public wf::plugin_interface_t
 
         filter_views(views);
 
+        wf::scale_transformer::padding pad;
+        scale_padding_signal signal(pad);
+        output->emit_signal("scale-padding", &signal);
+
         auto workarea = output->workspace->get_workarea();
 
         auto sorted_rows = view_sort(views);
         size_t cnt_rows  = sorted_rows.size();
 
-        const double scaled_height = (double)
-            (workarea.height - (cnt_rows + 1) * spacing) / cnt_rows;
+        const double scaled_height = std::max((double)
+            (workarea.height - (cnt_rows + 1) * spacing) / cnt_rows -
+            pad.top - pad.bottom, 1.0);
         current_row_sizes.clear();
 
         for (size_t i = 0; i < cnt_rows; i++)
         {
             size_t cnt_cols = sorted_rows[i].size();
             current_row_sizes.push_back(cnt_cols);
-            const double scaled_width = (double)
-                (workarea.width - (cnt_cols + 1) * spacing) / cnt_cols;
+            const double scaled_width = std::max((double)
+                (workarea.width - (cnt_cols + 1) * spacing) / cnt_cols -
+                pad.left - pad.right, 1.0);
 
             for (size_t j = 0; j < cnt_cols; j++)
             {
-                double x = workarea.x + spacing + (spacing + scaled_width) * j;
-                double y = workarea.y + spacing + (spacing + scaled_height) * i;
+                double x = workarea.x + spacing +
+                    (spacing + pad.left + pad.right + scaled_width) * j;
+                double y = workarea.y + spacing +
+                    (spacing + pad.top + pad.bottom + scaled_height) * i;
 
                 auto view = sorted_rows[i][j];
 

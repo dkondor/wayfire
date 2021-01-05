@@ -5,6 +5,7 @@
 
 #include <wayfire/object.hpp>
 #include <wayfire/view.hpp>
+#include <wayfire/plugins/scale-transform.hpp>
 #include <vector>
 #include <algorithm>
 
@@ -72,5 +73,33 @@ void scale_filter_views(scale_filter_signal *signal, pred&& p)
  *   the filter is changed. It is a no-op if scale is not currently running.
  * argument: unused
  */
+
+/**
+ * name: scale-transformer-added
+ * on: output
+ * when: This signal is emitted when scale adds a transformer to a view, so
+ *   plugins extending its functionality can add their overlays to it.
+ * argument: pointer to the newly added transformer
+ */
+struct scale_transformer_added_signal : public wf::signal_data_t
+{
+    wf::scale_transformer *transformer;
+};
+
+/**
+ * name: scale-padding
+ * on: output
+ * when: This signal is emitted by scale before arranging views in a new layout.
+ *   Plugins that wish to add overlays to the scaled views that stretch outisde
+ *   them can indicate the amount of padding they need.
+ * argument: Padding to be used, not including the default spacing used by scale.
+ *   Plugins can increase these values. Note that padding is not cumulative.
+ */
+struct scale_padding_signal : public wf::signal_data_t
+{
+    wf::scale_transformer::padding& pad;
+    scale_padding_signal(wf::scale_transformer::padding& pad_) : pad(pad_)
+    {}
+};
 
 #endif

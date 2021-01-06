@@ -205,6 +205,7 @@ add_title_overlay{[this] (wf::signal_data_t *data)
 
 mouse_update{[this] (auto)
     {
+		LOGI("Got mouse event");
         update_title_overlay_mouse();
     }
 },

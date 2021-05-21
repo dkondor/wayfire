@@ -30,7 +30,7 @@ class wlr_ext_workspaces_intergration : public plugin_interface_t
   public:
     wlr_ext_workspace_group_handle_v1 *group;
     std::vector<std::vector<wlr_ext_workspace_handle_v1*>> workspaces;
-    std::vector<std::vector<wl_listener_wrapper>> on_ws_remove;
+    std::vector<std::vector<std::unique_ptr<wl_listener_wrapper>>> on_ws_remove;
 
     wf::wl_listener_wrapper on_commit;
     wf::wl_listener_wrapper on_ws_create;
@@ -54,8 +54,7 @@ class wlr_ext_workspaces_intergration : public plugin_interface_t
         dimensions_t ws_dim = output->workspace->get_workspace_grid_size();
         workspaces.resize(ws_dim.height,
             std::vector<wlr_ext_workspace_handle_v1*>(ws_dim.width));
-        on_ws_remove.resize(ws_dim.height,
-            std::vector<wl_listener_wrapper>(ws_dim.width));
+        on_ws_remove.resize(ws_dim.height);
         for (int i = 0; i < ws_dim.height; i++)
         {
             for (int j = 0; j < ws_dim.width; j++)
@@ -75,13 +74,16 @@ class wlr_ext_workspaces_intergration : public plugin_interface_t
                     workspaces[i][j], &coordinates);
                 wl_array_release(&coordinates);
 
-                on_ws_remove[i][j].set_callback([&] (void*)
+                on_ws_remove[i].emplace_back(
+                    std::make_unique<wf::wl_listener_wrapper>());
+                on_ws_remove[i][j] = std::make_unique<wf::wl_listener_wrapper>();
+                on_ws_remove[i][j]->set_callback([=] (void*)
                 {
                     LOGD("Application requested removal of workspace (",
                         i, ", ", j, ")");
                 });
 
-                on_ws_remove[i][j].connect(&workspaces[i][j]->events.remove_request);
+                on_ws_remove[i][j]->connect(&workspaces[i][j]->events.remove_request);
             }
         }
 

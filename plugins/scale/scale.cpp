@@ -68,6 +68,7 @@ struct view_scale_data
     };
 
     view_visibility_t visibility = view_visibility_t::VISIBLE;
+    bool was_minimized = false; /* flag to indicate if this view was originally minimized */
 };
 
 /**
@@ -109,6 +110,7 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
     wf::option_wrapper_t<bool> middle_click_close{"scale/middle_click_close"};
     wf::option_wrapper_t<double> inactive_alpha{"scale/inactive_alpha"};
     wf::option_wrapper_t<bool> allow_scale_zoom{"scale/allow_zoom"};
+    wf::option_wrapper_t<bool> include_minimized{"scale/include_minimized"};
 
     /* maximum scale -- 1.0 means we will not "zoom in" on a view */
     const double max_scale_factor = 1.0;
@@ -198,6 +200,15 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
         scale_data[view].transformer = tr;
         view->get_transformed_node()->add_transformer(tr, wf::TRANSFORMER_2D,
             "scale");
+        /* Handle potentially minimized views by making them visible,
+         * however, they start out as fully transparent. */
+        if (view->minimized)
+        {
+            tr->alpha = 0.0;
+            wf::scene::set_node_enabled(view->get_root_node(), true);
+            scale_data[view].was_minimized = true;
+        }
+
         /* Transformers are added only once when scale is activated so
          * this is a good place to connect the geometry-changed handler */
         view->connect(&view_geometry_changed);
@@ -231,6 +242,11 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
             for (auto& toplevel : e.first->enumerate_views(false))
             {
                 pop_transformer(toplevel);
+            }
+
+            if (e.second.was_minimized)
+            {
+                wf::scene::set_node_enabled(e.first->get_root_node(), false);
             }
 
             if (e.second.visibility == view_scale_data::view_visibility_t::HIDDEN)
@@ -659,7 +675,8 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
         view = find_view_in_grid(next_row, next_col);
         if (view && (current_focus_view != view))
         {
-            // view_focused handler will update the view state
+            /* view_focused handler will update the view state
+             * note: this will always unminimize a minimized view */
             output->focus_view(view, false);
         }
     }
@@ -707,7 +724,8 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
     /* Returns a list of views for all workspaces */
     std::vector<wayfire_toplevel_view> get_all_workspace_views()
     {
-        return output->wset()->get_views(wf::WSET_EXCLUDE_MINIMIZED | wf::WSET_MAPPED_ONLY);
+        return output->wset()->get_views(
+            (include_minimized ? 0 : wf::WSET_EXCLUDE_MINIMIZED) | wf::WSET_MAPPED_ONLY);
     }
 
     /* Returns a list of views for the current workspace */
@@ -1338,14 +1356,22 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
 
         for (auto& e : scale_data)
         {
-            fade_in(e.first);
-            setup_view_transform(e.second, 1, 1, 0, 0, 1);
-            if (e.second.visibility == view_scale_data::view_visibility_t::HIDDEN)
+            if (e.first->minimized && (e.first != current_focus_view))
             {
-                wf::scene::set_node_enabled(e.first->get_transformed_node(), true);
-            }
+                e.second.visibility =
+                    view_scale_data::view_visibility_t::HIDING;
+                setup_view_transform(e.second, 1, 1, 0, 0, 0);
+            } else
+            {
+                fade_in(e.first);
+                setup_view_transform(e.second, 1, 1, 0, 0, 1);
+                if (e.second.visibility == view_scale_data::view_visibility_t::HIDDEN)
+                {
+                    wf::scene::set_node_enabled(e.first->get_transformed_node(), true);
+                }
 
-            e.second.visibility = view_scale_data::view_visibility_t::VISIBLE;
+                e.second.visibility = view_scale_data::view_visibility_t::VISIBLE;
+            }
         }
 
         refocus();

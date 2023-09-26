@@ -1112,16 +1112,28 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
     {
         if (scale_data.count(get_top_parent(view)) != 0)
         {
-            remove_view(view);
-            if (scale_data.empty())
+            if (include_minimized && view->minimized && should_scale_view(view))
             {
-                finalize();
-            }
+                if (!scale_data.at(view).was_minimized)
+                {
+                    scale_data.at(view).was_minimized = true;
+                    wf::scene::set_node_enabled(view->get_root_node(), true);
+                }
 
-            if (!view->parent)
+                fade_out(view);
+            } else
             {
-                layout_slots(get_views());
-                return;
+                remove_view(view);
+                if (scale_data.empty())
+                {
+                    finalize();
+                }
+
+                if (!view->parent)
+                {
+                    layout_slots(get_views());
+                    return;
+                }
             }
         }
     }

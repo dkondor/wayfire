@@ -109,6 +109,7 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
     wf::option_wrapper_t<int> spacing{"scale/spacing"};
     wf::option_wrapper_t<bool> middle_click_close{"scale/middle_click_close"};
     wf::option_wrapper_t<double> inactive_alpha{"scale/inactive_alpha"};
+    wf::option_wrapper_t<double> minimized_alpha{"scale/minimized_alpha"};
     wf::option_wrapper_t<bool> allow_scale_zoom{"scale/allow_zoom"};
     wf::option_wrapper_t<bool> include_minimized{"scale/include_minimized"};
 
@@ -395,7 +396,8 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
             }
 
             auto alpha = scale_data[v].transformer->alpha;
-            scale_data[v].fade_animation.animate(alpha, (double)inactive_alpha);
+            double target_alpha = (v->minimized) ? minimized_alpha : inactive_alpha;
+            scale_data[v].fade_animation.animate(alpha, target_alpha);
         }
     }
 
@@ -940,8 +942,11 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
                 }
 
                 // Calculate target alpha for this view and its children
-                double target_alpha =
-                    (view == current_focus_view) ? 1 : (double)inactive_alpha;
+                double target_alpha = 1.0;
+                if (view != current_focus_view)
+                {
+                    target_alpha = (view->minimized) ? minimized_alpha : inactive_alpha;
+                }
 
                 // Helper function to calculate the desired scale for a view
                 const auto& calculate_scale = [=] (wf::dimensions_t vg)

@@ -54,6 +54,14 @@
 				<min>0.0</min>
 				<max>1.0</max>
 			</option>
+			<option name="minimized_alpha" type="double">
+				<_short>Minimized View Opacity</_short>
+				<_long>Set the opacity value of minimized views that are shown in scale.</_long>
+				<default>0.45</default>
+				<precision>0.05</precision>
+				<min>0.0</min>
+				<max>1.0</max>
+			</option>
 			<option name="title_overlay" type="string">
 				<_short>Show views' title</_short>
 				<_long>Whether to display the title of each view as an overlay.</_long>

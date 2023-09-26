@@ -435,6 +435,11 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
             return;
         }
 
+        if (scale_data.at(view).was_minimized)
+        {
+            wf::scene::set_node_enabled(view->get_root_node(), false);
+        }
+
         for (auto v : view->enumerate_views(false))
         {
             check_focus_view(v);
@@ -880,7 +885,9 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
         {
             std::sort(views.begin(), views.end(), [=] (wayfire_toplevel_view a, wayfire_toplevel_view b)
             {
-                return wf::get_focus_timestamp(a) > wf::get_focus_timestamp(b);
+                /* note: avoid focusing minimized views if possible */
+                return (a->minimized < b->minimized) ||
+                ((a->minimized == b->minimized) && (wf::get_focus_timestamp(a) > wf::get_focus_timestamp(b)));
             });
 
             current_focus_view = views.empty() ? nullptr : views.front();
@@ -1114,6 +1121,7 @@ class wayfire_scale : public wf::per_output_plugin_instance_t,
             if (!view->parent)
             {
                 layout_slots(get_views());
+                return;
             }
         }
     }

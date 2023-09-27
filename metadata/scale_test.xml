@@ -4,7 +4,7 @@
 		<_short>Test Scale Filter</_short>
 		<_long>Test activating scale from another plugin with a filter set.</_long>
 		<category>Accessibility</category>
-		<option name="activate" type="activator">
+		<option name="activate" type="key">
 			<_short>Activate</_short>
 			<_long>Activate scale with filtering.</_long>
 			<default>&lt;super&gt; KEY_1</default>

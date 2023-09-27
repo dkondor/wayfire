@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="scale_ipc_filter">
+		<_short>Scale IPC addon</_short>
+		<_long>Allow activating scale on a subset of views via IPC.</_long>
+		<category>Utility</category>
+	</plugin>
+</wayfire>

@@ -14,9 +14,10 @@
 #include <wayfire/plugins/wobbly/wobbly-signal.hpp>
 #include <wayfire/nonstd/wlroots-full.hpp>
 #include <wlr/util/edges.h>
+#include <wayfire/plugins/common/key-repeat.hpp>
 
 class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t,
-    public wf::touch_interaction_t
+    public wf::touch_interaction_t, public wf::keyboard_interaction_t
 {
     wf::signal::connection_t<wf::view_resize_request_signal> on_resize_request =
         [=] (wf::view_resize_request_signal *request)
@@ -35,6 +36,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
             is_using_touch = false;
         }
 
+        is_using_keyboard  = true; //!! TODO: maybe we need to distinguish if the request came from the client or another plugin !!
         was_client_request = true;
         preserve_aspect    = false;
         initiate(request->view, request->edges);
@@ -52,18 +54,26 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
 
     wf::button_callback activate_binding;
     wf::button_callback activate_binding_preserve_aspect;
+    wf::key_callback activate_key_binding;
+    wf::key_repeat_t key_repeat;
 
     wayfire_toplevel_view view;
 
-    bool was_client_request, is_using_touch;
+    bool is_active = false;
+    bool was_client_request, is_using_touch, is_using_keyboard;
     bool preserve_aspect = false;
     wf::point_t grab_start;
+    wf::point_t last_input;
     wf::geometry_t grabbed_geometry;
+    wf::point_t key_diff; /* amount of change in size from keyboard interaction */
 
+    uint32_t current_key;
     uint32_t edges;
     wf::option_wrapper_t<wf::buttonbinding_t> button{"resize/activate"};
     wf::option_wrapper_t<wf::buttonbinding_t> button_preserve_aspect{
         "resize/activate_preserve_aspect"};
+    wf::option_wrapper_t<wf::keybinding_t> key{"resize/activate_key"};
+    wf::option_wrapper_t<int> step{"resize/step"};
     std::unique_ptr<wf::input_grab_t> input_grab;
     wf::plugin_activation_data_t grab_interface = {
         .name = "resize",
@@ -73,7 +83,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
   public:
     void init() override
     {
-        input_grab = std::make_unique<wf::input_grab_t>("resize", output, nullptr, this, this);
+        input_grab = std::make_unique<wf::input_grab_t>("resize", output, this, this, this);
 
         activate_binding = [=] (auto)
         {
@@ -85,11 +95,37 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
             return activate(true);
         };
 
+        activate_key_binding = [=] (auto)
+        {
+            if (is_active)
+            {
+                if (is_using_keyboard)
+                {
+                    deactivate();
+                }
+            } else
+            {
+                auto view = toplevel_cast(wf::get_core().seat->get_active_view());
+                if (view)
+                {
+                    is_using_touch     = false;
+                    was_client_request = false;
+                    is_using_keyboard  = true;
+                    preserve_aspect    = false;
+                    current_key        = 0;
+                    initiate(view, WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM);
+                }
+            }
+
+            return false;
+        };
+
         output->add_button(button, &activate_binding);
         output->add_button(button_preserve_aspect, &activate_binding_preserve_aspect);
+        output->add_key(key, &activate_key_binding);
         grab_interface.cancel = [=] ()
         {
-            input_pressed(WLR_BUTTON_RELEASED);
+            deactivate();
         };
 
         output->connect(&on_resize_request);
@@ -99,10 +135,11 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
     bool activate(bool should_preserve_aspect)
     {
         auto view = toplevel_cast(wf::get_core().get_cursor_focus_view());
-        if (view)
+        if (view && !is_active)
         {
             is_using_touch     = false;
             was_client_request = false;
+            is_using_keyboard  = false;
             preserve_aspect    = should_preserve_aspect;
             initiate(view);
         }
@@ -112,7 +149,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
 
     void handle_pointer_button(const wlr_pointer_button_event& event) override
     {
-        if ((event.state == WLR_BUTTON_RELEASED) && was_client_request && (event.button == BTN_LEFT))
+        if ((event.state == WLR_BUTTON_RELEASED) && (was_client_request || is_using_keyboard) && (event.button == BTN_LEFT))
         {
             return input_pressed(event.state);
         }
@@ -144,6 +181,33 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         if (finger_id == 0)
         {
             input_motion();
+        }
+    }
+
+    void handle_keyboard_key(wf::seat_t*, wlr_keyboard_key_event ev) override
+    {
+        uint32_t key = ev.keycode;
+        if (!is_using_keyboard)
+        {
+            return;
+        }
+
+        if (ev.state == WLR_KEY_PRESSED)
+        {
+            if (handle_key_pressed(key))
+            {
+                /* set up repeat if this key can be handled by us */
+                current_key = key;
+                key_repeat.set_callback(key, [=] (uint32_t key)
+                {
+                    handle_key_pressed(key);
+                    return true;
+                });
+            }
+        } else if (key == current_key)
+        {
+            key_repeat.disconnect();
+            current_key = 0;
         }
     }
 
@@ -220,7 +284,8 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         input_grab->set_wants_raw_input(true);
         input_grab->grab_input(wf::scene::layer::OVERLAY);
 
-        grab_start = get_input_coords();
+        key_diff = {0, 0};
+        last_input = grab_start = get_input_coords();
         grabbed_geometry = view->get_geometry();
         if (view->pending_tiled_edges())
         {
@@ -246,6 +311,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         start_wobbly(view, anchor_x, anchor_y);
         wf::get_core().set_cursor(wlr_xcursor_get_resize_name((wlr_edges)edges));
 
+        is_active = true;
         return true;
     }
 
@@ -256,8 +322,14 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
             return;
         }
 
+        deactivate();
+    }
+
+    void deactivate()
+    {
         input_grab->ungrab_input();
         output->deactivate_plugin(&grab_interface);
+        is_active = false;
 
         if (view)
         {
@@ -300,10 +372,14 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
 
     void input_motion()
     {
-        auto input = get_input_coords();
-        int dx     = input.x - grab_start.x;
-        int dy     = input.y - grab_start.y;
+        last_input = get_input_coords();
+        update_size();
+    }
 
+    void update_size()
+    {
+        int dx = last_input.x - grab_start.x;
+        int dy = last_input.y - grab_start.y;
         wf::geometry_t desired = grabbed_geometry;
         double ratio;
         if (preserve_aspect)
@@ -313,20 +389,20 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
 
         if (edges & WLR_EDGE_LEFT)
         {
-            desired.x     += dx;
-            desired.width -= dx;
+            desired.x     += dx + key_diff.x;
+            desired.width -= dx + key_diff.x;
         } else if (edges & WLR_EDGE_RIGHT)
         {
-            desired.width += dx;
+            desired.width += dx + key_diff.x;
         }
 
         if (edges & WLR_EDGE_TOP)
         {
-            desired.y += dy;
-            desired.height -= dy;
+            desired.y += dy + key_diff.y;
+            desired.height -= dy + key_diff.y;
         } else if (edges & WLR_EDGE_BOTTOM)
         {
-            desired.height += dy;
+            desired.height += dy + key_diff.y;
         }
 
         if (preserve_aspect)
@@ -352,6 +428,40 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         view->toplevel()->pending().gravity  = calculate_gravity();
         view->toplevel()->pending().geometry = desired;
         wf::get_core().tx_manager->schedule_object(view->toplevel());
+    }
+
+    /* Handle one key press. Returns whether the key press should be
+     * repeated while it is held down. */
+    bool handle_key_pressed(uint32_t key)
+    {
+        switch (key)
+        {
+          case KEY_UP:
+            key_diff.y -= step;
+            break;
+
+          case KEY_DOWN:
+            key_diff.y += step;
+            break;
+
+          case KEY_LEFT:
+            key_diff.x -= step;
+            break;
+
+          case KEY_RIGHT:
+            key_diff.x += step;
+            break;
+
+          case KEY_ENTER:
+            deactivate();
+            return false;
+
+          default:
+            return false;
+        }
+
+        update_size();
+        return true;
     }
 
     void fini() override

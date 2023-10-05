@@ -27,11 +27,13 @@
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/plugins/common/move-drag-interface.hpp>
 #include <wayfire/plugins/grid.hpp>
+#include <wayfire/plugins/common/key-repeat.hpp>
 
 class wayfire_move : public wf::per_output_plugin_instance_t,
-    public wf::pointer_interaction_t, public wf::touch_interaction_t
+    public wf::pointer_interaction_t, public wf::touch_interaction_t, public wf::keyboard_interaction_t
 {
     wf::button_callback activate_binding;
+    wf::key_callback activate_key_binding;
 
     wf::option_wrapper_t<bool> enable_snap{"move/enable_snap"};
     wf::option_wrapper_t<bool> join_views{"move/join_views"};
@@ -39,6 +41,8 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
     wf::option_wrapper_t<int> quarter_snap_threshold{"move/quarter_snap_threshold"};
     wf::option_wrapper_t<int> workspace_switch_after{"move/workspace_switch_after"};
     wf::option_wrapper_t<wf::buttonbinding_t> activate_button{"move/activate"};
+    wf::option_wrapper_t<wf::keybinding_t> activate_key{"move/activate_key"};
+    wf::option_wrapper_t<int> step{"move/step"};
 
     wf::option_wrapper_t<bool> move_enable_snap_off{"move/enable_snap_off"};
     wf::option_wrapper_t<int> move_snap_off_threshold{"move/snap_off_threshold"};
@@ -49,6 +53,10 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
         wf::grid::slot_t slot_id = wf::grid::SLOT_NONE;
     } slot;
 
+    wf::point_t key_diff; /* amount of change in position from keyboard interaction */
+    bool is_using_keyboard;
+    uint32_t current_key = 0;
+    wf::key_repeat_t key_repeat;
 
     wf::wl_timer<false> workspace_switch_timer;
 
@@ -162,7 +170,7 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
         wf::get_core().connect(&on_raw_pointer_button);
         wf::get_core().connect(&on_raw_touch_down);
 
-        input_grab = std::make_unique<wf::input_grab_t>("move", output, nullptr, this, this);
+        input_grab = std::make_unique<wf::input_grab_t>("move", output, this, this, this);
         input_grab->set_wants_raw_input(true);
 
         activate_binding = [=] (auto)
@@ -170,6 +178,7 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
             auto view = toplevel_cast(wf::get_core().get_cursor_focus_view());
             if (view && (view->role != wf::VIEW_ROLE_DESKTOP_ENVIRONMENT))
             {
+                is_using_keyboard = false;
                 initiate(view, get_global_input_coords());
             }
 
@@ -177,7 +186,21 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
             return false;
         };
 
+        activate_key_binding = [=] (auto)
+        {
+            auto view = toplevel_cast(wf::get_core().seat->get_active_view());
+            if (view && (view->role != wf::VIEW_ROLE_DESKTOP_ENVIRONMENT))
+            {
+                is_using_keyboard = true;
+                key_diff = {0, 0};
+                return initiate(view, get_global_input_coords());
+            }
+
+            return false;
+        };
+
         output->add_button(activate_button, &activate_binding);
+        output->add_key(activate_key, &activate_key_binding);
 
         using namespace std::placeholders;
 
@@ -221,10 +244,73 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
     {
         handle_input_motion();
     }
+    
+    void handle_keyboard_key(wf::seat_t*, wlr_keyboard_key_event ev) override
+    {
+        uint32_t key = ev.keycode;
+        if (!is_using_keyboard)
+        {
+            return;
+        }
+
+        if (ev.state == WLR_KEY_PRESSED)
+        {
+            if (handle_key_pressed(key))
+            {
+                /* set up repeat if this key can be handled by us */
+                current_key = key;
+                key_repeat.set_callback(key, [=] (uint32_t key)
+                {
+                    handle_key_pressed(key);
+                    return true;
+                });
+            }
+        } else if (key == current_key)
+        {
+            key_repeat.disconnect();
+            current_key = 0;
+        }
+    }
+    
+    /* Handle one key press. Returns whether the key press should be
+     * repeated while it is held down. */
+    bool handle_key_pressed(uint32_t key)
+    {
+        switch (key)
+        {
+          case KEY_UP:
+            key_diff.y -= step;
+            break;
+
+          case KEY_DOWN:
+            key_diff.y += step;
+            break;
+
+          case KEY_LEFT:
+            key_diff.x -= step;
+            break;
+
+          case KEY_RIGHT:
+            key_diff.x += step;
+            break;
+
+          case KEY_ENTER:
+            drag_helper->handle_input_released();
+            return false;
+
+          default:
+            return false;
+        }
+
+        handle_input_motion();
+        return true;
+    }
 
     wf::signal::connection_t<wf::view_move_request_signal> move_request =
         [=] (wf::view_move_request_signal *ev)
     {
+        is_using_keyboard = true;
+        key_diff = {0, 0};
         initiate(ev->view, last_input_press_position);
     };
 
@@ -555,10 +641,10 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
 
     void handle_input_motion()
     {
-        drag_helper->handle_motion(get_global_input_coords());
+        drag_helper->handle_motion(get_global_input_coords() + key_diff);
         if (is_snap_enabled())
         {
-            update_slot(calc_slot(get_input_coords()));
+            update_slot(calc_slot(get_input_coords() + key_diff));
         }
     }
 

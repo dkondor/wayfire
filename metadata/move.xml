@@ -9,6 +9,16 @@
 			<_long>When the specified button is held down, you can drag windows to move them.</_long>
 			<default>&lt;super&gt; BTN_LEFT</default>
 		</option>
+		<option name="activate_key" type="key">
+			<_short>Activate move with the keyboard</_short>
+			<_long>Start an interactive move where the arrow keys can be used along with the mouse to move a view. Press enter or the mouse button to exit.</_long>
+			<default>disabled</default>
+		</option>
+		<option name="step" type="int">
+			<_short>Keyboard sensitivity</_short>
+			<_long>Move a view by this amount when using the arrow keys.</_long>
+			<default>20</default>
+		</option>
 		<!-- "Aero Snap" -->
 		<option name="enable_snap" type="bool">
 			<_short>Snap</_short>

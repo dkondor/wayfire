@@ -18,7 +18,7 @@
 		
 		<option name="activate_key" type="key">
 			<_short>Activate resize with the keyboard</_short>
-			<_long>Start an interactive resize where the arrow keys can be used along with the mouse to resize a view. Press enter to exit.</_long>
+			<_long>Start an interactive resize where the arrow keys can be used along with the mouse to resize a view. Press enter or the mouse button to exit.</_long>
 			<default>disabled</default>
 		</option>
 		<option name="step" type="int">

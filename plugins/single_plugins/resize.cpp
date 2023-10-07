@@ -128,11 +128,10 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         auto target_toplevel = toplevel_cast(target_view);
         if (is_active)
         {
-            if (target_toplevel && target_toplevel != this->view)
+            if (target_toplevel && (target_toplevel != this->view))
             {
                 deactivate();
-            }
-            else if (is_using_keyboard)
+            } else if (is_using_keyboard)
             {
                 deactivate();
                 return true;
@@ -150,7 +149,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
             exit_on_click     = true;
             is_using_keyboard = allow_keyboard;
             preserve_aspect   = preserve_aspect_;
-            current_key       = 0;
+            current_key = 0;
             initiate(target_toplevel, WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM);
             return true;
         }
@@ -295,7 +294,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         input_grab->set_wants_raw_input(true);
         input_grab->grab_input(wf::scene::layer::OVERLAY);
 
-        key_diff = {0, 0};
+        key_diff   = {0, 0};
         last_input = grab_start = get_input_coords();
         grabbed_geometry = view->get_geometry();
         if (view->pending_tiled_edges())
@@ -516,7 +515,7 @@ class wayfire_resize_global : public wf::plugin_interface_t,
         {
             WFJSON_OPTIONAL_FIELD(data, "allow_keyboard", boolean);
             WFJSON_OPTIONAL_FIELD(data, "preserve_aspect", boolean);
-            
+
             wf::output_t *wo = wf::get_core().seat->get_active_output();
             if (!choose_ipc_output(data, &wo))
             {
@@ -529,14 +528,14 @@ class wayfire_resize_global : public wf::plugin_interface_t,
                 return wf::ipc::json_error("view id not found!");
             }
 
-            bool allow_keyboard = true;
+            bool allow_keyboard  = true;
             bool preserve_aspect = false;
-            
+
             if (data.contains("allow_keyboard"))
             {
                 allow_keyboard = data["allow_keyboard"];
             }
-            
+
             if (data.contains("preserve_aspect"))
             {
                 preserve_aspect = data["preserve_aspect"];
@@ -547,7 +546,7 @@ class wayfire_resize_global : public wf::plugin_interface_t,
             return wf::ipc::json_ok();
         };
     }
-    
+
     void unset_callbacks()
     {
         activator_cb = wf::activator_callback();

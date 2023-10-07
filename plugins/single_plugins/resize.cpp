@@ -15,6 +15,7 @@
 #include <wayfire/nonstd/wlroots-full.hpp>
 #include <wlr/util/edges.h>
 #include <wayfire/plugins/common/key-repeat.hpp>
+#include "plugins/ipc/ipc-activator.hpp"
 
 class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::pointer_interaction_t,
     public wf::touch_interaction_t, public wf::keyboard_interaction_t
@@ -36,9 +37,10 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
             is_using_touch = false;
         }
 
-        is_using_keyboard  = true; //!! TODO: maybe we need to distinguish if the request came from the client or another plugin !!
-        was_client_request = true;
-        preserve_aspect    = false;
+        is_using_keyboard = client_resize_use_keyboard;
+        is_using_pointer  = true;
+        preserve_aspect   = false;
+        activated_with_pointer = false;
         initiate(request->view, request->edges);
     };
 
@@ -52,15 +54,16 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         }
     };
 
+    wf::key_repeat_t key_repeat;
+
     wf::button_callback activate_binding;
     wf::button_callback activate_binding_preserve_aspect;
-    wf::key_callback activate_key_binding;
-    wf::key_repeat_t key_repeat;
 
     wayfire_toplevel_view view;
 
     bool is_active = false;
-    bool was_client_request, is_using_touch, is_using_keyboard;
+    bool activated_with_pointer;
+    bool is_using_pointer, is_using_touch, is_using_keyboard;
     bool preserve_aspect = false;
     wf::point_t grab_start;
     wf::point_t last_input;
@@ -72,8 +75,9 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
     wf::option_wrapper_t<wf::buttonbinding_t> button{"resize/activate"};
     wf::option_wrapper_t<wf::buttonbinding_t> button_preserve_aspect{
         "resize/activate_preserve_aspect"};
-    wf::option_wrapper_t<wf::keybinding_t> key{"resize/activate_key"};
     wf::option_wrapper_t<int> step{"resize/step"};
+    wf::option_wrapper_t<bool> client_resize_use_keyboard{"resize/client_resize_use_keyboard"};
+    wf::option_wrapper_t<bool> keyboard_allow_mouse{"resize/keyboard_allow_mouse"};
     std::unique_ptr<wf::input_grab_t> input_grab;
     wf::plugin_activation_data_t grab_interface = {
         .name = "resize",
@@ -87,42 +91,16 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
 
         activate_binding = [=] (auto)
         {
-            return activate(false);
+            return activate_pointer(nullptr, false, true);
         };
 
         activate_binding_preserve_aspect = [=] (auto)
         {
-            return activate(true);
-        };
-
-        activate_key_binding = [=] (auto)
-        {
-            if (is_active)
-            {
-                if (is_using_keyboard)
-                {
-                    deactivate();
-                }
-            } else
-            {
-                auto view = toplevel_cast(wf::get_core().seat->get_active_view());
-                if (view)
-                {
-                    is_using_touch     = false;
-                    was_client_request = false;
-                    is_using_keyboard  = true;
-                    preserve_aspect    = false;
-                    current_key        = 0;
-                    initiate(view, WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM);
-                }
-            }
-
-            return false;
+            return activate_pointer(nullptr, true, true);
         };
 
         output->add_button(button, &activate_binding);
         output->add_button(button_preserve_aspect, &activate_binding_preserve_aspect);
-        output->add_key(key, &activate_key_binding);
         grab_interface.cancel = [=] ()
         {
             deactivate();
@@ -132,16 +110,40 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         output->connect(&on_view_disappeared);
     }
 
-    bool activate(bool should_preserve_aspect)
+    bool activate_key(wayfire_view view)
     {
-        auto view = toplevel_cast(wf::get_core().get_cursor_focus_view());
-        if (view && !is_active)
+        if (is_active && is_using_keyboard)
         {
-            is_using_touch     = false;
-            was_client_request = false;
-            is_using_keyboard  = false;
-            preserve_aspect    = should_preserve_aspect;
-            initiate(view);
+            deactivate();
+            return true;
+        }
+
+        auto toplevel = toplevel_cast(view ?: wf::get_core().seat->get_active_view());
+        if (toplevel)
+        {
+            is_using_touch    = false;
+            is_using_pointer  = keyboard_allow_mouse;
+            is_using_keyboard = true;
+            preserve_aspect   = false;
+            current_key = 0;
+            activated_with_pointer = false;
+            return initiate(toplevel, WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM);
+        }
+
+        return false;
+    }
+
+    bool activate_pointer(wayfire_view view, bool should_preserve_aspect, bool real_pointer)
+    {
+        auto toplevel = toplevel_cast(view ?: wf::get_core().get_cursor_focus_view());
+        if (toplevel && !is_active)
+        {
+            is_using_touch   = false;
+            is_using_pointer = true;
+            activated_with_pointer = real_pointer;
+            is_using_keyboard = false;
+            preserve_aspect   = should_preserve_aspect;
+            initiate(toplevel);
         }
 
         return false;
@@ -149,7 +151,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
 
     void handle_pointer_button(const wlr_pointer_button_event& event) override
     {
-        if ((event.state == WLR_BUTTON_RELEASED) && (was_client_request || is_using_keyboard) && (event.button == BTN_LEFT))
+        if ((event.state == WLR_BUTTON_RELEASED) && (!activated_with_pointer) && (event.button == BTN_LEFT))
         {
             return input_pressed(event.state);
         }
@@ -165,7 +167,10 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
 
     void handle_pointer_motion(wf::pointf_t pointer_position, uint32_t time_ms) override
     {
-        input_motion();
+        if (is_using_pointer)
+        {
+            input_motion();
+        }
     }
 
     void handle_touch_up(uint32_t time_ms, int finger_id, wf::pointf_t lift_off_position) override
@@ -284,7 +289,7 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
         input_grab->set_wants_raw_input(true);
         input_grab->grab_input(wf::scene::layer::OVERLAY);
 
-        key_diff = {0, 0};
+        key_diff   = {0, 0};
         last_input = grab_start = get_input_coords();
         grabbed_geometry = view->get_geometry();
         if (view->pending_tiled_edges())
@@ -476,4 +481,73 @@ class wayfire_resize : public wf::per_output_plugin_instance_t, public wf::point
     }
 };
 
-DECLARE_WAYFIRE_PLUGIN(wf::per_output_plugin_t<wayfire_resize>);
+class wayfire_resize_global : public wf::plugin_interface_t,
+    public wf::per_output_tracker_mixin_t<wayfire_resize>
+{
+    wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
+    wf::ipc_activator_t activate_keyboard{"resize/activate_key"};
+
+
+    wf::ipc::method_callback activate_cb = [=] (const nlohmann::json& js)
+    {
+        return activate(js, false);
+    };
+
+    wf::ipc::method_callback activate_aspect_cb = [=] (const nlohmann::json& js)
+    {
+        return activate(js, true);
+    };
+
+    nlohmann::json activate(const nlohmann::json& data, bool preserve_aspect)
+    {
+        WFJSON_OPTIONAL_FIELD(data, "output_id", number_integer);
+        WFJSON_OPTIONAL_FIELD(data, "view_id", number_integer);
+
+        wf::output_t *wo = wf::get_core().seat->get_active_output();
+        if (data.contains("output_id"))
+        {
+            wo = wf::ipc::find_output_by_id(data["output_id"]);
+            if (!wo)
+            {
+                return wf::ipc::json_error("output id not found!");
+            }
+        }
+
+        wayfire_view view;
+        if (data.contains("view_id"))
+        {
+            view = wf::ipc::find_view_by_id(data["view_id"]);
+            if (!view)
+            {
+                return wf::ipc::json_error("view id not found!");
+            }
+        }
+
+        output_instance[wo]->activate_pointer(view, preserve_aspect, false);
+
+        return wf::ipc::json_ok();
+    }
+
+  public:
+    void init() override
+    {
+        this->init_output_tracking();
+        ipc_repo->register_method("resize/activate", activate_cb);
+        ipc_repo->register_method("resize/activate_preserve_aspect", activate_aspect_cb);
+        activate_keyboard.set_handler(activate_keyboard_cb);
+    }
+
+    void fini() override
+    {
+        this->fini_output_tracking();
+        ipc_repo->unregister_method("resize/activate");
+        ipc_repo->unregister_method("resize/activate_preserve_aspect");
+    }
+
+    wf::ipc_activator_t::handler_t activate_keyboard_cb = [=] (wf::output_t *output, wayfire_view view)
+    {
+        return output_instance[output]->activate_key(view);
+    };
+};
+
+DECLARE_WAYFIRE_PLUGIN(wayfire_resize_global);

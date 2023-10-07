@@ -16,15 +16,25 @@
 			<default>disabled</default>
 		</option>
 		
-		<option name="activate_key" type="key">
+		<option name="activate_key" type="activator">
 			<_short>Activate resize with the keyboard</_short>
-			<_long>Start an interactive resize where the arrow keys can be used along with the mouse to resize a view. Press enter or the mouse button to exit.</_long>
+			<_long>Resize a view using the arrow keys. Press enter or the mouse button to exit.</_long>
 			<default>disabled</default>
+		</option>
+		<option name="keyboard_allow_mouse" type="bool">
+			<_short>Allow combined mouse and keyboard interaction</_short>
+			<_long>Whether to allow using the mouse if resize was started with the keyboard.</_long>
+			<default>true</default>
 		</option>
 		<option name="step" type="int">
 			<_short>Keyboard sensitivity</_short>
 			<_long>Change the size by this amount when using the arrow keys.</_long>
 			<default>20</default>
+		</option>
+		<option name="client_resize_use_keyboard" type="bool">
+			<_short>Allow keyboard for interactive resize</_short>
+			<_long>Whether to allow keyboard interaction if resize is initiated by a client view (typically by dragging at the edges).</_long>
+			<default>false</default>
 		</option>
 	</plugin>
 </wayfire>

@@ -193,6 +193,8 @@ class wayfire_move : public wf::per_output_plugin_instance_t,
             {
                 is_using_keyboard = true;
                 key_diff = {0, 0};
+                auto geom = view->get_geometry();
+                wf::get_core().warp_cursor({geom.x + geom.width / 2, geom.y + geom.height / 2});
                 return initiate(view, get_global_input_coords());
             }
 

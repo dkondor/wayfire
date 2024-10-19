@@ -440,6 +440,9 @@ std::shared_ptr<wayfire_layer_shell_view> wayfire_layer_shell_view::create(wlr_l
 
     lsurface->output = self->get_output()->handle;
 
+    // Initial state
+    self->prev_state = lsurface->current;
+
     // Initial configure
     self->on_commit_unmapped.emit(NULL);
 
@@ -565,10 +568,10 @@ void wayfire_layer_shell_view::commit()
 
         if (prev_state.keyboard_interactive != state->keyboard_interactive)
         {
-            if ((state->keyboard_interactive >= 1) && (state->layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP))
+            if ((state->keyboard_interactive == 1) && (state->layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP))
             {
                 wf::get_core().seat->focus_view(self());
-            } else
+            } else if (state->keyboard_interactive == 0)
             {
                 wf::get_core().seat->refocus();
             }

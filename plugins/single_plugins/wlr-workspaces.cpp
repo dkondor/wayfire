@@ -68,8 +68,8 @@ class wlr_ext_workspaces_intergration : public wf::per_output_plugin_instance_t
 
                 wl_array coordinates;
                 wl_array_init(&coordinates);
-                *(int32_t*)wl_array_add(&coordinates, sizeof(int32_t)) = i;
                 *(int32_t*)wl_array_add(&coordinates, sizeof(int32_t)) = j;
+                *(int32_t*)wl_array_add(&coordinates, sizeof(int32_t)) = i;
                 wlr_ext_workspace_handle_v1_set_coordinates(
                     workspaces[i][j], &coordinates);
                 wl_array_release(&coordinates);

@@ -1,7 +1,7 @@
-#include <wayfire/plugin.hpp>
+#include <wayfire/per-output-plugin.hpp>
 #include <wayfire/core.hpp>
 #include <wayfire/output.hpp>
-#include <wayfire/workspace-manager.hpp>
+#include <wayfire/workspace-set.hpp>
 #include <wayfire/signal-definitions.hpp>
 
 extern "C"
@@ -25,7 +25,7 @@ class wlr_ext_workspaces_manager : public custom_data_t
     }
 };
 
-class wlr_ext_workspaces_intergration : public plugin_interface_t
+class wlr_ext_workspaces_intergration : public wf::per_output_plugin_instance_t
 {
   public:
     wlr_ext_workspace_group_handle_v1 *group;
@@ -51,7 +51,7 @@ class wlr_ext_workspaces_intergration : public plugin_interface_t
         });
         on_ws_create.connect(&group->events.create_workspace_request);
 
-        dimensions_t ws_dim = output->workspace->get_workspace_grid_size();
+        dimensions_t ws_dim = output->wset()->get_workspace_grid_size();
         workspaces.resize(ws_dim.height,
             std::vector<wlr_ext_workspace_handle_v1*>(ws_dim.width));
         on_ws_remove.resize(ws_dim.height);
@@ -89,13 +89,13 @@ class wlr_ext_workspaces_intergration : public plugin_interface_t
 
         /* Initially, workspace 0,0 is active */
         wlr_ext_workspace_handle_v1_set_active(workspaces[0][0], true);
-        output->connect_signal("workspace-changed", &on_current_workspace_changed);
+        output->connect(&on_current_workspace_changed);
 
         /* Listen for client requests */
         on_commit.set_callback([&] (void*)
         {
             point_t active_workspace = {0, 0};
-            dimensions_t ws_dim = output->workspace->get_workspace_grid_size();
+            dimensions_t ws_dim = output->wset()->get_workspace_grid_size();
 
             for (int i = 0; i < ws_dim.height; i++)
             {
@@ -110,14 +110,14 @@ class wlr_ext_workspaces_intergration : public plugin_interface_t
                 }
             }
 
-            output->workspace->request_workspace(active_workspace);
+            output->wset()->request_workspace(active_workspace);
         });
         on_commit.connect(&manager->manager->events.commit);
     }
 
-    signal_connection_t on_current_workspace_changed = [&] (signal_data_t *data)
+    wf::signal::connection_t<wf::workspace_changed_signal> on_current_workspace_changed =
+        [=] (wf::workspace_changed_signal *ev)
     {
-        auto ev = static_cast<wf::workspace_changed_signal*>(data);
         wlr_ext_workspace_handle_v1_set_active(
             workspaces[ev->old_viewport.y][ev->old_viewport.x], false);
         wlr_ext_workspace_handle_v1_set_active(
@@ -135,14 +135,7 @@ class wlr_ext_workspaces_intergration : public plugin_interface_t
             wf::get_core().erase_data<wlr_ext_workspaces_manager>();
         }
     }
-
-    /** Currently, we do not want to kill clients when unloading this plugin, so
-     * we disallow disabling it. */
-    bool is_unloadable() override
-    {
-        return false;
-    }
 };
 }
 
-DECLARE_WAYFIRE_PLUGIN(wf::wlr_ext_workspaces_intergration);
+DECLARE_WAYFIRE_PLUGIN(wf::per_output_plugin_t<wf::wlr_ext_workspaces_intergration>);

@@ -5,6 +5,7 @@
 #include "plugins/ipc/ipc-method-repository.hpp"
 #include <wayfire/per-output-plugin.hpp>
 #include <nlohmann/json.hpp>
+#include "plugins/protocols/gtk-shell.hpp"
 
 namespace wf
 {
@@ -113,6 +114,7 @@ class ipc_rules_events_methods_t : public wf::per_output_tracker_mixin_t<>
         {"view-focused", get_generic_core_registration_cb(&on_kbfocus_changed)},
         {"view-title-changed", get_generic_core_registration_cb(&on_title_changed)},
         {"view-app-id-changed", get_generic_core_registration_cb(&on_app_id_changed)},
+        {"view-gtk-dbus-properties-changed", get_generic_core_registration_cb(&on_dbus_properties_changed)},
         {"plugin-activation-state-changed", get_generic_core_registration_cb(&on_plugin_activation_changed)},
         {"output-gain-focus", get_generic_core_registration_cb(&on_output_gain_focus)},
 
@@ -293,6 +295,24 @@ class ipc_rules_events_methods_t : public wf::per_output_tracker_mixin_t<>
     {
         send_view_to_subscribes(ev->view, "view-app-id-changed");
     };
+
+    wf::signal::connection_t<gtk_shell_dbus_properties_signal> on_dbus_properties_changed =
+        [=] (gtk_shell_dbus_properties_signal *ev)
+    {
+        nlohmann::json data;
+        data["event"] = "view-gtk-dbus-properties-changed";
+        data["view"]  = view_to_json(ev->view);
+
+        data["app_menu_path"] = ev->app_menu_path ? ev->app_menu_path : "(null)";
+        data["menubar_path"]  = ev->menubar_path ? ev->menubar_path : "(null)";
+        data["window_object_path"] = ev->window_object_path ? ev->window_object_path : "(null)";
+        data["application_object_path"] =
+            ev->application_object_path ? ev->application_object_path : "(null)";
+        data["unique_bus_name"] = ev->unique_bus_name ? ev->unique_bus_name : "(null)";
+
+        send_event_to_subscribes(data, data["event"]);
+    };
+
 
     wf::signal::connection_t<wf::output_plugin_activated_changed_signal> on_plugin_activation_changed =
         [=] (wf::output_plugin_activated_changed_signal *ev)

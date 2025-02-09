@@ -160,7 +160,6 @@ def sock_event(ch, cond):
     global self_id
     global active_view_id
     global conn
-    print("in sock_event")
     msg = sock.read_next_event()
     if msg is None:
         return False
@@ -171,7 +170,7 @@ def sock_event(ch, cond):
                 print(msg["view"]["app-id"], end = " - ")
                 print(msg["view"]["id"])
                 view_ids[msg["view"]["id"]] = msg["view"]["app-id"]
-                if msg["view"]["app-id"] == "gtk_socket.py":
+                if msg["view"]["app-id"] == "wf_gtk_global_menu.py":
                     self_id = msg["view"]["id"]
             else:
                 print('')
@@ -191,7 +190,8 @@ def sock_event(ch, cond):
         elif msg["event"] == "view-focused":
             if ("view" in msg) and (msg["view"] is not None):
                 id1 = msg["view"]["id"]
-                if self_id and (id1 != self_id):
+                print("focused view has ID: {}".format(id1))
+                if not self_id or (id1 != self_id):
                     active_view_id = id1
                     have_new_menu = False
                     if active_view_id in view_ids:

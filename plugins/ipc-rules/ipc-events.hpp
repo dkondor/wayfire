@@ -6,6 +6,7 @@
 #include <wayfire/per-output-plugin.hpp>
 #include <nlohmann/json.hpp>
 #include "plugins/protocols/gtk-shell.hpp"
+#include "plugins/protocols/kde-appmenu.hpp"
 
 namespace wf
 {
@@ -115,6 +116,7 @@ class ipc_rules_events_methods_t : public wf::per_output_tracker_mixin_t<>
         {"view-title-changed", get_generic_core_registration_cb(&on_title_changed)},
         {"view-app-id-changed", get_generic_core_registration_cb(&on_app_id_changed)},
         {"view-gtk-dbus-properties-changed", get_generic_core_registration_cb(&on_dbus_properties_changed)},
+        {"view-kde-appmenu-changed", get_generic_core_registration_cb(&on_kde_appmenu_changed)},
         {"plugin-activation-state-changed", get_generic_core_registration_cb(&on_plugin_activation_changed)},
         {"output-gain-focus", get_generic_core_registration_cb(&on_output_gain_focus)},
 
@@ -313,6 +315,18 @@ class ipc_rules_events_methods_t : public wf::per_output_tracker_mixin_t<>
         send_event_to_subscribes(data, data["event"]);
     };
 
+    wf::signal::connection_t<kde_appmenu_dbus_address_signal> on_kde_appmenu_changed =
+        [=] (kde_appmenu_dbus_address_signal *ev)
+    {
+        nlohmann::json data;
+        data["event"] = "view-kde-appmenu-changed";
+        data["view"]  = view_to_json(ev->view);
+
+        data["service_name"] = ev->service_name ? ev->service_name : "(null)";
+        data["object_path"]  = ev->object_path ? ev->object_path : "(null)";
+
+        send_event_to_subscribes(data, data["event"]);
+    };
 
     wf::signal::connection_t<wf::output_plugin_activated_changed_signal> on_plugin_activation_changed =
         [=] (wf::output_plugin_activated_changed_signal *ev)

@@ -14,7 +14,8 @@
 class wayfire_foreign_toplevel;
 using foreign_toplevel_map_type = std::map<wayfire_toplevel_view, std::unique_ptr<wayfire_foreign_toplevel>>;
 
-class toplevel_gtk_shell1_dbus_properties_t : public wf::custom_data_t {
+class toplevel_gtk_shell1_dbus_properties_t : public wf::custom_data_t
+{
   public:
     std::optional<std::string> app_menu_path;
     std::optional<std::string> menubar_path;
@@ -23,7 +24,8 @@ class toplevel_gtk_shell1_dbus_properties_t : public wf::custom_data_t {
     std::optional<std::string> unique_bus_name;
 };
 
-class toplevel_kde_appmenu_path_t : public wf::custom_data_t {
+class toplevel_kde_appmenu_path_t : public wf::custom_data_t
+{
   public:
     std::optional<std::string> service_name;
     std::optional<std::string> object_path;
@@ -300,7 +302,8 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
     }
 
     void fini() override
-    {}
+    {
+    }
 
     bool is_unloadable() override
     {
@@ -319,7 +322,7 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
             if (auto props = toplevel->get_data<toplevel_gtk_shell1_dbus_properties_t>())
             {
                 handle_for_view[toplevel]->toplevel_send_gtk_shell1_dbus_properties(
-                    nullptr, //!! TODO: application ID
+                    nullptr, // !! TODO: application ID
                     props->app_menu_path ? props->app_menu_path->c_str() : nullptr,
                     props->menubar_path ? props->menubar_path->c_str() : nullptr,
                     props->window_object_path ? props->window_object_path->c_str() : nullptr,
@@ -350,31 +353,59 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
             if (it != handle_for_view.end())
             {
                 it->second->toplevel_send_gtk_shell1_dbus_properties(
-                    nullptr, //!! TODO: application ID
+                    nullptr, // !! TODO: application ID
                     ev->app_menu_path,
                     ev->menubar_path,
                     ev->window_object_path,
                     ev->application_object_path,
                     ev->unique_bus_name);
             }
-            /* Store the values with the view. This is necessary to cover
-             * the cases when either:
-             *  (1) the view has not been mapped yet; or
-             *  (2) the view is later unmapped and remapped
+
+            /* Store the values with the view. This is necessary to cover the cases when either:
+             *  (1) the view has not been mapped yet; or (2) the view is later unmapped and remapped
              */
             auto props = toplevel->get_data_safe<toplevel_gtk_shell1_dbus_properties_t>();
-            if (ev->app_menu_path) props->app_menu_path = ev->app_menu_path;
-            else props->app_menu_path.reset();
-            if (ev->application_object_path) props->application_object_path =
-                ev->application_object_path;
-            else props->application_object_path.reset();
-            if (ev->menubar_path) props->menubar_path = ev->menubar_path;
-            else props->menubar_path.reset();
-            if (ev->unique_bus_name) props->unique_bus_name = ev->unique_bus_name;
-            else props->unique_bus_name.reset();
-            if (ev->window_object_path) props->window_object_path =
-                ev->window_object_path;
-            else props->window_object_path.reset();
+            if (ev->app_menu_path)
+            {
+                props->app_menu_path = ev->app_menu_path;
+            } else
+            {
+                props->app_menu_path.reset();
+            }
+
+            if (ev->application_object_path)
+            {
+                props->application_object_path =
+                    ev->application_object_path;
+            } else
+            {
+                props->application_object_path.reset();
+            }
+
+            if (ev->menubar_path)
+            {
+                props->menubar_path = ev->menubar_path;
+            } else
+            {
+                props->menubar_path.reset();
+            }
+
+            if (ev->unique_bus_name)
+            {
+                props->unique_bus_name = ev->unique_bus_name;
+            } else
+            {
+                props->unique_bus_name.reset();
+            }
+
+            if (ev->window_object_path)
+            {
+                props->window_object_path =
+                    ev->window_object_path;
+            } else
+            {
+                props->window_object_path.reset();
+            }
         }
     };
 
@@ -390,16 +421,26 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
                     ev->service_name,
                     ev->object_path);
             }
-            /* Store the values with the view. This is necessary to cover
-             * the cases when either:
-             *  (1) the view has not been mapped yet; or
-             *  (2) the view is later unmapped and remapped
+
+            /* Store the values with the view. This is necessary to cover the cases when either:
+             *  (1) the view has not been mapped yet; or (2) the view is later unmapped and remapped
              */
             auto props = toplevel->get_data_safe<toplevel_kde_appmenu_path_t>();
-            if (ev->service_name) props->service_name = ev->service_name;
-            else props->service_name.reset();
-            if (ev->object_path) props->object_path = ev->object_path;
-            else props->object_path.reset();
+            if (ev->service_name)
+            {
+                props->service_name = ev->service_name;
+            } else
+            {
+                props->service_name.reset();
+            }
+
+            if (ev->object_path)
+            {
+                props->object_path = ev->object_path;
+            } else
+            {
+                props->object_path.reset();
+            }
         }
     };
 

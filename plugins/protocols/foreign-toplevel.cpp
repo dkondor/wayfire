@@ -8,6 +8,7 @@
 #include <wayfire/toplevel-view.hpp>
 #include <wayfire/window-manager.hpp>
 #include "gtk-shell.hpp"
+#include "kde-appmenu.hpp"
 #include "config.h"
 
 class wayfire_foreign_toplevel;
@@ -20,6 +21,12 @@ class toplevel_gtk_shell1_dbus_properties_t : public wf::custom_data_t {
     std::optional<std::string> window_object_path;
     std::optional<std::string> application_object_path;
     std::optional<std::string> unique_bus_name;
+};
+
+class toplevel_kde_appmenu_path_t : public wf::custom_data_t {
+  public:
+    std::optional<std::string> service_name;
+    std::optional<std::string> object_path;
 };
 
 class wayfire_foreign_toplevel
@@ -86,6 +93,11 @@ class wayfire_foreign_toplevel
             window_object_path,
             application_object_path,
             unique_bus_name);
+    }
+
+    void toplevel_send_kde_appmenu_path(const char *service_name, const char *object_path)
+    {
+        wlr_foreign_toplevel_handle_v1_set_kde_appmenu_path(handle, service_name, object_path);
     }
 
   private:
@@ -284,6 +296,7 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
         wf::get_core().connect(&on_view_mapped);
         wf::get_core().connect(&on_view_unmapped);
         wf::get_core().connect(&on_view_dbus_properties_changed);
+        wf::get_core().connect(&on_view_kde_appmenu_changed);
     }
 
     void fini() override
@@ -312,6 +325,13 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
                     props->window_object_path ? props->window_object_path->c_str() : nullptr,
                     props->application_object_path ? props->application_object_path->c_str() : nullptr,
                     props->unique_bus_name ? props->unique_bus_name->c_str() : nullptr);
+            }
+
+            if (auto props = toplevel->get_data<toplevel_kde_appmenu_path_t>())
+            {
+                handle_for_view[toplevel]->toplevel_send_kde_appmenu_path(
+                    props->service_name ? props->service_name->c_str() : nullptr,
+                    props->object_path ? props->object_path->c_str() : nullptr);
             }
         }
     };
@@ -355,6 +375,31 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
             if (ev->window_object_path) props->window_object_path =
                 ev->window_object_path;
             else props->window_object_path.reset();
+        }
+    };
+
+    wf::signal::connection_t<kde_appmenu_dbus_address_signal> on_view_kde_appmenu_changed =
+        [=] (kde_appmenu_dbus_address_signal *ev)
+    {
+        if (auto toplevel = wf::toplevel_cast(ev->view))
+        {
+            auto it = handle_for_view.find(toplevel);
+            if (it != handle_for_view.end())
+            {
+                it->second->toplevel_send_kde_appmenu_path(
+                    ev->service_name,
+                    ev->object_path);
+            }
+            /* Store the values with the view. This is necessary to cover
+             * the cases when either:
+             *  (1) the view has not been mapped yet; or
+             *  (2) the view is later unmapped and remapped
+             */
+            auto props = toplevel->get_data_safe<toplevel_kde_appmenu_path_t>();
+            if (ev->service_name) props->service_name = ev->service_name;
+            else props->service_name.reset();
+            if (ev->object_path) props->object_path = ev->object_path;
+            else props->object_path.reset();
         }
     };
 

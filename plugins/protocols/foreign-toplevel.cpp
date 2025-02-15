@@ -81,25 +81,38 @@ class wayfire_foreign_toplevel
     }
 
     void toplevel_send_gtk_shell1_dbus_properties(
-        const char *application_id,
         const char *app_menu_path,
         const char *menubar_path,
         const char *window_object_path,
         const char *application_object_path,
         const char *unique_bus_name)
     {
-        wlr_foreign_toplevel_handle_v1_set_gtk_shell1_dbus_properties(handle,
-            application_id,
-            app_menu_path,
-            menubar_path,
-            window_object_path,
-            application_object_path,
-            unique_bus_name);
+        //!! TODO: app_menu_path (not sure which interface it corresponds to)
+        
+        if (menubar_path && unique_bus_name)
+            wlr_foreign_toplevel_handle_v1_add_surface_dbus_annotation(
+                handle, "org.gtk.Menus", unique_bus_name, menubar_path);
+        else wlr_foreign_toplevel_handle_v1_remove_surface_dbus_annotation(
+            handle, "org.gtk.Menus");
+
+        if (window_object_path && unique_bus_name)
+            wlr_foreign_toplevel_handle_v1_add_surface_dbus_annotation(
+                handle, "org.gtk.Actions", unique_bus_name, window_object_path);
+        else wlr_foreign_toplevel_handle_v1_remove_surface_dbus_annotation(
+            handle, "org.gtk.Actions");
+
+        if (application_object_path && unique_bus_name)
+            wlr_foreign_toplevel_handle_v1_add_client_dbus_annotation(
+                handle, "org.gtk.Actions", unique_bus_name, application_object_path);
+        else wlr_foreign_toplevel_handle_v1_remove_client_dbus_annotation(
+            handle, "org.gtk.Actions");
     }
 
     void toplevel_send_kde_appmenu_path(const char *service_name, const char *object_path)
     {
-        wlr_foreign_toplevel_handle_v1_set_kde_appmenu_path(handle, service_name, object_path);
+        if (service_name && object_path)
+            wlr_foreign_toplevel_handle_v1_add_surface_dbus_annotation(
+                handle, "com.canonical.dbusmenu", service_name, object_path);
     }
 
   private:
@@ -322,7 +335,6 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
             if (auto props = toplevel->get_data<toplevel_gtk_shell1_dbus_properties_t>())
             {
                 handle_for_view[toplevel]->toplevel_send_gtk_shell1_dbus_properties(
-                    nullptr, // !! TODO: application ID
                     props->app_menu_path ? props->app_menu_path->c_str() : nullptr,
                     props->menubar_path ? props->menubar_path->c_str() : nullptr,
                     props->window_object_path ? props->window_object_path->c_str() : nullptr,
@@ -353,7 +365,6 @@ class wayfire_foreign_toplevel_protocol_impl : public wf::plugin_interface_t
             if (it != handle_for_view.end())
             {
                 it->second->toplevel_send_gtk_shell1_dbus_properties(
-                    nullptr, // !! TODO: application ID
                     ev->app_menu_path,
                     ev->menubar_path,
                     ev->window_object_path,

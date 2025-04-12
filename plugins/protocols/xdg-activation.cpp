@@ -38,6 +38,7 @@ class wayfire_xdg_activation_protocol_impl : public wf::plugin_interface_t
         xdg_activation_request_activate.disconnect();
         xdg_activation_new_token.disconnect();
         xdg_activation_token_destroy.disconnect();
+        on_view_mapped.disconnect();
         last_token = nullptr;
         if (last_toplevel_view)
         {
@@ -86,8 +87,25 @@ class wayfire_xdg_activation_protocol_impl : public wf::plugin_interface_t
                 return;
             }
 
-            LOGD("Activating view");
-            wf::get_core().default_wm->focus_request(toplevel);
+            if (toplevel->toplevel()->current().mapped)
+            {
+                LOGD("Activating view");
+                wf::get_core().default_wm->focus_request(toplevel);
+            } else
+            {
+                /* This toplevel is not mapped yet, we want to focus it
+                 * when it it first mapped. */
+                on_view_mapped.disconnect();
+                view->connect(&on_view_mapped);
+                return; // avoid disconnecting last_view's signals
+            }
+
+            if (last_toplevel_view)
+            {
+                // no need to track the activating view anymore
+                last_toplevel_view->disconnect(&on_view_unmapped);
+                last_toplevel_view = nullptr;
+            }
         });
 
         xdg_activation_new_token.set_callback([this] (void *data)
@@ -186,11 +204,27 @@ class wayfire_xdg_activation_protocol_impl : public wf::plugin_interface_t
 
                 last_toplevel_view->disconnect(&on_view_unmapped);
                 last_toplevel_view = nullptr;
+                on_view_mapped.disconnect();
             }
 
             xdg_activation_token_destroy.disconnect();
             last_token = nullptr;
         }
+    };
+
+    wf::signal::connection_t<wf::view_mapped_signal> on_view_mapped = [this] (auto signal)
+    {
+        signal->view->disconnect(&on_view_mapped);
+
+        if (last_toplevel_view)
+        {
+            // no need to track the activating view anymore
+            last_toplevel_view->disconnect(&on_view_unmapped);
+            last_toplevel_view = nullptr;
+        }
+
+        LOGD("Activating view");
+        wf::get_core().default_wm->focus_request(signal->view);
     };
 
     struct wlr_xdg_activation_v1 *xdg_activation;

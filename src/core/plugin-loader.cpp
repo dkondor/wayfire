@@ -268,14 +268,8 @@ void wf::plugin_manager_t::reload_dynamic_plugins()
             loaded_plugins[plugin] = std::move(ptr);
         } catch (...)
         {
-            // fini() is not called, init() had better not set up anything
-            // that will cause problems
-            ptr.instance.reset();
-            if (enable_so_unloading)
-            {
-                dlclose(ptr.so_handle);
-            }
-
+            // this will call fini(), the destructor and optionally unload the .so
+            destroy_plugin(ptr);
             LOGE("Failed to init plugin \"", plugin_name, "\". ");
         }
     }

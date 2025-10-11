@@ -1,5 +1,6 @@
 #include <wayfire/per-output-plugin.hpp>
 #include <wayfire/core.hpp>
+#include <wayfire/util.hpp>
 #include <wayfire/output.hpp>
 #include <wayfire/workspace-set.hpp>
 #include <wayfire/signal-definitions.hpp>
@@ -21,7 +22,7 @@ class wlr_ext_workspaces_manager : public custom_data_t
     wlr_ext_workspace_manager_v1 *manager;
     wlr_ext_workspaces_manager()
     {
-        manager = wlr_ext_workspace_manager_v1_create(wf::get_core().display);
+        manager = wlr_ext_workspace_manager_v1_create(wf::get_core().display, 1);
     }
 };
 
@@ -30,7 +31,8 @@ class wlr_ext_workspaces_intergration : public wf::per_output_plugin_instance_t
   public:
     wlr_ext_workspace_group_handle_v1 *group;
     std::vector<std::vector<wlr_ext_workspace_handle_v1*>> workspaces;
-    std::vector<std::vector<std::unique_ptr<wl_listener_wrapper>>> on_ws_remove;
+    std::vector<std::vector<std::unique_ptr<wf::wl_listener_wrapper>>> on_ws_remove;
+    std::vector<std::vector<std::unique_ptr<wf::wl_listener_wrapper>>> on_ws_activate;
 
     wf::wl_listener_wrapper on_commit;
     wf::wl_listener_wrapper on_ws_create;
@@ -42,28 +44,34 @@ class wlr_ext_workspaces_intergration : public wf::per_output_plugin_instance_t
         ++manager->refcount;
 
         /* Create group & workspaces */
-        group = wlr_ext_workspace_group_handle_v1_create(manager->manager);
+        group = wlr_ext_workspace_group_handle_v1_create(manager->manager,
+            WLR_EXT_WORKSPACE_GROUP_HANDLE_V1_CAP_CREATE_WORKSPACE);
+        wlr_ext_workspace_group_handle_v1_output_enter(group, output->handle);
         on_ws_create.set_callback([&] (void *data)
         {
-            auto ev = static_cast<
-                wlr_ext_workspace_group_handle_v1_create_workspace_event*>(data);
-            LOGD("Application requested creation of workspace ", ev->name);
+            const char *name = static_cast<const char*>(data);
+            LOGD("Application requested creation of workspace ", name ? name : "(no name)");
         });
-        on_ws_create.connect(&group->events.create_workspace_request);
+        on_ws_create.connect(&group->events.create_workspace);
 
         dimensions_t ws_dim = output->wset()->get_workspace_grid_size();
         workspaces.resize(ws_dim.height,
             std::vector<wlr_ext_workspace_handle_v1*>(ws_dim.width));
         on_ws_remove.resize(ws_dim.height);
+        on_ws_activate.resize(ws_dim.height);
         for (int i = 0; i < ws_dim.height; i++)
         {
             for (int j = 0; j < ws_dim.width; j++)
             {
-                workspaces[i][j] = wlr_ext_workspace_handle_v1_create(group);
-
                 std::string name =
                     output->to_string() + ":workspace-" +
-                    std::to_string(i * ws_dim.width + j);
+                    std::to_string(j) + "-" + std::to_string(i);
+                
+                workspaces[i][j] = wlr_ext_workspace_handle_v1_create(manager->manager,
+                    name.c_str(),
+                    WLR_EXT_WORKSPACE_HANDLE_V1_CAP_ACTIVATE |
+                    WLR_EXT_WORKSPACE_HANDLE_V1_CAP_REMOVE);
+                wlr_ext_workspace_handle_v1_set_group(workspaces[i][j], group);
                 wlr_ext_workspace_handle_v1_set_name(workspaces[i][j], name.c_str());
 
                 wl_array coordinates;
@@ -76,43 +84,30 @@ class wlr_ext_workspaces_intergration : public wf::per_output_plugin_instance_t
 
                 on_ws_remove[i].emplace_back(
                     std::make_unique<wf::wl_listener_wrapper>());
-                on_ws_remove[i][j] = std::make_unique<wf::wl_listener_wrapper>();
+                // on_ws_remove[i][j] = std::make_unique<wf::wl_listener_wrapper>();
                 on_ws_remove[i][j]->set_callback([=] (void*)
                 {
                     LOGD("Application requested removal of workspace (",
                         i, ", ", j, ")");
                 });
 
-                on_ws_remove[i][j]->connect(&workspaces[i][j]->events.remove_request);
+                on_ws_remove[i][j]->connect(&workspaces[i][j]->events.remove);
+
+                on_ws_activate[i].emplace_back(
+                    std::make_unique<wf::wl_listener_wrapper>());
+                on_ws_activate[i][j]->set_callback([i, j, this] (void*)
+                {
+                    // workspaces in core are [column, row]
+                    point_t active_workspace = {j, i};
+                    output->wset()->request_workspace(active_workspace);
+                });
+                on_ws_activate[i][j]->connect(&workspaces[i][j]->events.activate);
             }
         }
 
         /* Initially, workspace 0,0 is active */
         wlr_ext_workspace_handle_v1_set_active(workspaces[0][0], true);
         output->connect(&on_current_workspace_changed);
-
-        /* Listen for client requests */
-        on_commit.set_callback([&] (void*)
-        {
-            point_t active_workspace = {0, 0};
-            dimensions_t ws_dim = output->wset()->get_workspace_grid_size();
-
-            for (int i = 0; i < ws_dim.height; i++)
-            {
-                for (int j = 0; j < ws_dim.width; j++)
-                {
-                    if (workspaces[i][j]->current &
-                        WLR_EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE)
-                    {
-                        // workspaces in core are [column, row]
-                        active_workspace = {j, i};
-                    }
-                }
-            }
-
-            output->wset()->request_workspace(active_workspace);
-        });
-        on_commit.connect(&manager->manager->events.commit);
     }
 
     wf::signal::connection_t<wf::workspace_changed_signal> on_current_workspace_changed =

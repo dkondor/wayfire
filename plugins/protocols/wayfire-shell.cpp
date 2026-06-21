@@ -16,6 +16,8 @@
 #include "wayfire/plugins/ipc/ipc-activator.hpp"
 #include "wayfire/util.hpp"
 
+#define ZWF_SHELL_MANAGER_V2_CURRENT_VERSION 3
+
 /* ----------------------------- wfs_hotspot -------------------------------- */
 static void handle_hotspot_destroy(wl_resource *resource);
 
@@ -26,6 +28,7 @@ static void handle_hotspot_destroy(wl_resource *resource);
 class wfs_hotspot
 {
   private:
+    int client_version;
     wf::geometry_t trigger;
     wf::geometry_t hotspot_geometry;
 
@@ -193,14 +196,20 @@ class wfs_hotspot
      * Create a new hotspot.
      * It is guaranteedd that edge_mask contains at most 2 non-opposing edges.
      */
-    wfs_hotspot(wf::output_t *output, wf::geometry_t trigger, uint32_t threshold, uint32_t timeout,
+    wfs_hotspot(wf::output_t *output, int client_version, wf::geometry_t trigger, uint32_t threshold,
+        uint32_t timeout,
         wl_client *client, uint32_t id) : trigger(trigger), threshold(threshold), timeout_ms(timeout)
     {
         // Calculate expanded bounding box
         this->hotspot_geometry = calculate_hotspot_geometry(output, trigger, threshold);
 
+        // For version checking
+        this->client_version = client_version;
+
         // Create resource and setup signals (same as before)
-        hotspot_resource = wl_resource_create(client, &zwf_hotspot_v2_interface, 3, id);
+        hotspot_resource =
+            wl_resource_create(client, &zwf_hotspot_v2_interface,
+                std::min(client_version, ZWF_SHELL_MANAGER_V2_CURRENT_VERSION), id);
         wl_resource_set_implementation(hotspot_resource, NULL, this, handle_hotspot_destroy);
 
         // output destroy handler
@@ -261,7 +270,7 @@ struct wayfire_shell_toggle_menu_signal
  */
 class wfs_output
 {
-    wl_resource *shell_resource;
+    int client_version;
     wl_resource *resource;
     wf::output_t *output;
 
@@ -295,7 +304,7 @@ class wfs_output
 
     wf::signal::connection_t<wayfire_shell_toggle_menu_signal> on_toggle_menu = [=] (auto)
     {
-        if (wl_resource_get_version(shell_resource) < ZWF_OUTPUT_V2_TOGGLE_MENU_SINCE_VERSION)
+        if (client_version < ZWF_OUTPUT_V2_TOGGLE_MENU_SINCE_VERSION)
         {
             return;
         }
@@ -304,13 +313,14 @@ class wfs_output
     };
 
   public:
-    wfs_output(wf::output_t *output, wl_resource *shell_resource, wl_client *client, int id)
+    wfs_output(wf::output_t *output, int client_version, wl_client *client, int id)
     {
         this->output = output;
-        this->shell_resource = shell_resource;
+        this->client_version = client_version;
 
         resource =
-            wl_resource_create(client, &zwf_output_v2_interface, 3, id);
+            wl_resource_create(client, &zwf_output_v2_interface,
+                std::min(client_version, ZWF_SHELL_MANAGER_V2_CURRENT_VERSION), id);
         wl_resource_set_implementation(resource, &zwf_output_impl, this, handle_output_destroy);
         output->connect(&on_fullscreen_layer_focused);
         output->connect(&on_toggle_menu);
@@ -418,12 +428,13 @@ class wfs_output
         if (!this->output)
         {
             auto resource = wl_resource_create(wl_resource_get_client(
-                this->resource), &zwf_hotspot_v2_interface, 3, id);
+                this->resource), &zwf_hotspot_v2_interface,
+                std::min(client_version, ZWF_SHELL_MANAGER_V2_CURRENT_VERSION), id);
             wl_resource_set_implementation(resource, NULL, NULL, NULL);
             return;
         }
 
-        new wfs_hotspot(this->output, trigger_rect, threshold, timeout, wl_resource_get_client(
+        new wfs_hotspot(this->output, this->client_version, trigger_rect, threshold, timeout, wl_resource_get_client(
             this->resource), id);
     }
 };
@@ -496,7 +507,8 @@ class wfs_surface
     wfs_surface(wayfire_view view, wl_client *client, int id)
     {
         this->view = view;
-        resource   = wl_resource_create(client, &zwf_surface_v2_interface, 3, id);
+        resource   = wl_resource_create(client, &zwf_surface_v2_interface,
+            ZWF_SHELL_MANAGER_V2_CURRENT_VERSION, id);
         wl_resource_set_implementation(resource, &zwf_surface_impl, this, handle_surface_destroy);
         view->connect(&on_unmap);
     }
@@ -532,7 +544,7 @@ static void zwf_shell_manager_get_wf_output(wl_client *client, wl_resource *reso
     if (wo)
     {
         // will be deleted when the resource is destroyed
-        new wfs_output(wo, resource, client, id);
+        new wfs_output(wo, wl_resource_get_version(resource), client, id);
     }
 }
 
@@ -571,7 +583,8 @@ wayfire_shell *wayfire_shell_create(wl_display *display)
 {
     wayfire_shell *ws = new wayfire_shell;
 
-    ws->shell_manager = wl_global_create(display, &zwf_shell_manager_v2_interface, 3, NULL,
+    ws->shell_manager = wl_global_create(display, &zwf_shell_manager_v2_interface,
+        ZWF_SHELL_MANAGER_V2_CURRENT_VERSION, NULL,
         bind_zwf_shell_manager);
 
     if (ws->shell_manager == NULL)

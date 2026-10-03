@@ -300,6 +300,8 @@ void wf::plugin_manager_t::load_static_plugins()
 
 std::vector<std::string> wf::get_plugin_paths()
 {
+    namespace fs = std::filesystem;
+
     std::vector<std::string> plugin_prefixes;
     if (char *plugin_path = getenv("WAYFIRE_PLUGIN_PATH"))
     {
@@ -312,38 +314,52 @@ std::vector<std::string> wf::get_plugin_paths()
     }
 
     // also add XDG specific paths
-    std::string xdg_data_dir;
-    char *c_xdg_data_dir = std::getenv("XDG_DATA_HOME");
-    char *c_user_home    = std::getenv("HOME");
-
-    if (c_xdg_data_dir != NULL)
+    fs::path xdg_data_dir;
+    if (char *c_xdg_data_dir = std::getenv("XDG_DATA_HOME"))
     {
-        xdg_data_dir = c_xdg_data_dir;
-    } else if (c_user_home != NULL)
+        xdg_data_dir = fs::path(c_xdg_data_dir);
+    } else if (char *c_user_home = std::getenv("HOME"))
     {
-        xdg_data_dir = (std::string)c_user_home + "/.local/share/";
+        xdg_data_dir = fs::path(c_user_home) / ".local" / "share";
     }
 
-    if (xdg_data_dir != "")
+    if (!xdg_data_dir.empty())
     {
+        auto plugin_path_base = xdg_data_dir / "wayfire" / "plugin-manager" / "install";
+
         // REL_LIBDIR from meson.build: get_option('libdir') to be compatible with wayfire-plugin
         std::string rel_libdir = REL_LIBDIR;
-        plugin_prefixes.push_back(xdg_data_dir + "/wayfire/plugin-manager/install/" +
-            rel_libdir + "/wayfire");
+        auto tmp_path = plugin_path_base / rel_libdir / "wayfire";
+        if (fs::exists(tmp_path))
+        {
+            plugin_prefixes.push_back(tmp_path.string());
+        }
 
         // previous hardcoded paths for wayfire-plugin
         if (rel_libdir != "lib")
         {
-            plugin_prefixes.push_back(xdg_data_dir + "/wayfire/plugin-manager/install/lib/wayfire");
+            tmp_path = plugin_path_base / "lib" / "wayfire";
+            if (fs::exists(tmp_path))
+            {
+                plugin_prefixes.push_back(tmp_path.string());
+            }
         }
 
         if (rel_libdir != "lib64")
         {
-            plugin_prefixes.push_back(xdg_data_dir + "/wayfire/plugin-manager/install/lib64/wayfire");
+            tmp_path = plugin_path_base / "lib64" / "wayfire";
+            if (fs::exists(tmp_path))
+            {
+                plugin_prefixes.push_back(tmp_path.string());
+            }
         }
 
         // additional path for manually installed plugins
-        plugin_prefixes.push_back(xdg_data_dir + "/wayfire/plugins");
+        tmp_path = xdg_data_dir / "wayfire" / "plugins";
+        if (fs::exists(tmp_path))
+        {
+            plugin_prefixes.push_back(tmp_path.string());
+        }
     }
 
     plugin_prefixes.push_back(PLUGIN_PATH);

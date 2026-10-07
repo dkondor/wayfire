@@ -329,40 +329,28 @@ std::vector<std::string> wf::get_plugin_paths()
 
         // REL_LIBDIR from meson.build: get_option('libdir') to be compatible with wayfire-plugin
         std::string rel_libdir = REL_LIBDIR;
-        auto tmp_path = plugin_path_base / rel_libdir / "wayfire";
-        if (fs::exists(tmp_path))
-        {
-            plugin_prefixes.push_back(tmp_path.string());
-        }
+        plugin_prefixes.push_back((plugin_path_base / rel_libdir / "wayfire").string());
 
         // previous hardcoded paths for wayfire-plugin
         if (rel_libdir != "lib")
         {
-            tmp_path = plugin_path_base / "lib" / "wayfire";
-            if (fs::exists(tmp_path))
-            {
-                plugin_prefixes.push_back(tmp_path.string());
-            }
+            plugin_prefixes.push_back((plugin_path_base / "lib" / "wayfire").string());
         }
 
         if (rel_libdir != "lib64")
         {
-            tmp_path = plugin_path_base / "lib64" / "wayfire";
-            if (fs::exists(tmp_path))
-            {
-                plugin_prefixes.push_back(tmp_path.string());
-            }
+            plugin_prefixes.push_back((plugin_path_base / "lib64" / "wayfire").string());
         }
 
         // additional path for manually installed plugins
-        tmp_path = xdg_data_dir / "wayfire" / "plugins";
-        if (fs::exists(tmp_path))
-        {
-            plugin_prefixes.push_back(tmp_path.string());
-        }
+        plugin_prefixes.push_back((xdg_data_dir / "wayfire" / "plugins").string());
     }
 
     plugin_prefixes.push_back(PLUGIN_PATH);
+
+    auto it = std::remove_if(plugin_prefixes.begin(), plugin_prefixes.end(),
+        [] (const auto& x) { return !fs::exists(x); });
+    plugin_prefixes.erase(it, plugin_prefixes.end());
 
     return plugin_prefixes;
 }

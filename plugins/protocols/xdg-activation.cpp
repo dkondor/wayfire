@@ -174,7 +174,7 @@ class wayfire_xdg_activation_protocol_impl : public wf::plugin_interface_t
                 if (new_view)
                 {
                     auto new_toplevel_view = wf::toplevel_cast(new_view);
-                    if (new_toplevel_view && new_toplevel_view == last_toplevel_view)
+                    if (new_toplevel_view && (new_toplevel_view == last_toplevel_view))
                     {
                         // Keyboard focus is moving to a parent of a dialog that was
                         // just closed (last_toplevel_view was updated in on_view_unmapped).
@@ -183,6 +183,7 @@ class wayfire_xdg_activation_protocol_impl : public wf::plugin_interface_t
                         return;
                     }
                 }
+
                 last_toplevel_view->disconnect(&on_view_unmapped);
                 last_toplevel_view = nullptr;
             }
@@ -197,7 +198,8 @@ class wayfire_xdg_activation_protocol_impl : public wf::plugin_interface_t
     wf::wl_listener_wrapper xdg_activation_new_token;
     wf::wl_listener_wrapper xdg_activation_token_destroy;
     struct wlr_xdg_activation_token_v1 *last_token = nullptr;
-    wayfire_toplevel_view last_toplevel_view = nullptr; // view that created the token if it is a toplevel (null if it is e.g. a layer-shell view)
+    wayfire_toplevel_view last_toplevel_view = nullptr; // view that created the token if it is a toplevel
+                                                        // (null if it is e.g. a layer-shell view)
 
     wf::option_wrapper_t<bool> check_surface{"xdg-activation/check_surface"};
     wf::option_wrapper_t<bool> only_last_token{"xdg-activation/only_last_request"};
